@@ -14,7 +14,7 @@ class ATPBind(data.ProteinDataset):
         self.num_samples = []
         self.valid_ratio = valid_ratio
         sequences, targets = self.get_seq_target(path)
-        self.load_sequence(sequences, targets)
+        self.load_sequence(sequences, targets, **kwargs)
         # [20,21,41]#[350, 38, 41]
 
     def get_seq_target(self, path):
