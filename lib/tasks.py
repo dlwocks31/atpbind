@@ -109,9 +109,9 @@ class NodePropertyPrediction(tasks.Task, core.Configurable):
         for _metric in self.metric:
             if _metric == "micro_acc":
                 score = metrics.accuracy(pred[_labeled], _target[_labeled].long())
-            elif metric == "micro_auroc":
+            elif _metric == "micro_auroc":
                 score = metrics.area_under_roc(pred[_labeled], _target[_labeled])
-            elif metric == "micro_auprc":
+            elif _metric == "micro_auprc":
                 score = metrics.area_under_prc(pred[_labeled], _target[_labeled])
             elif _metric == "macro_auroc":
                 score = metrics.variadic_area_under_roc(pred[_labeled], _target[_labeled], _size).mean()
