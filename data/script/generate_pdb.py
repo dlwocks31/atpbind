@@ -145,21 +145,25 @@ def validate(filename):
 
 
 '''
-4 of the pdb files generated from this cannot be loaded with data.Protein.from_pdb.
-Those are 3CRCA, 2C7EG, 3J2TB, 3VNUA, 4QREA.
+Some generated PDB files can't be loaded using data.Protein.from_pdb because of errors
+from RDKit ("Explicit valence for atom # 320 O, 3, is greater than permitted" error).
+This error not only occurs when loading generated PDB files, but also when loading
+the original PDB file from the PDB database.
+Filtering the PDB files with `ChainSelect` resolves a few cases, but some cases 
+(3CRCA, 2C7EG, 3J2TB, 3VNUA, 4QREA) still have same issues.
 
-Also, another 4 of the train set generated pdb has differnet number of residues
-when loaded with data.Protein.from_pdb compared to the original sequence.
-Those are 5J1SB, 1MABB, 3LEVH, 3BG5A.
+Also, a few generated PDB files show different residue counts when using 
+data.Protein.from_pdb compared to their original sequences in ATPBind dataset. 
+The generated PDB file is filtered using BioPython so that it matches the
+original sequence in ATPBind dataset, so this is probably due to different implementation 
+of loading PDB files in bioPython and torchprotein. (Need to investigate further)
+The affected PDB files are 5J1SB, 1MABB, 3LEVH, and 3BG5A.
 '''
 if __name__ == '__main__':
     warnings.filterwarnings("ignore", message=".*discontinuous at line.*")
     warnings.filterwarnings("ignore", message=".*Unknown.*")
     print('Generate train set..')
     generate_all_in_file('../../lib/train.txt')
-    '''
-    '''
-    #
     print('Generate test set..')
     generate_all_in_file('../../lib/test.txt')
 
