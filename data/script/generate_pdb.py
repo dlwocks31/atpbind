@@ -130,26 +130,40 @@ def try_loading_pdb(file_path):
 def validate(filename):
     _, sequences, _, pdb_ids = read_file(filename)
     for sequence, pdb_id in zip(sequences, pdb_ids):
-        print('Validating %s..' % pdb_id)
-        file_path = 'pdb/%s.pdb' % pdb_id
+        # print('Validating %s..' % pdb_id)
+        file_path = '../pdb/%s.pdb' % pdb_id
         protein = try_loading_pdb(file_path)
         if not protein:
             continue
         protein_sequence = ''.join(
             i for i in protein.to_sequence() if i != '.')
         if protein_sequence != sequence:
-            print('validation failed. len: %d %d' %
-                  (len(protein_sequence), len(sequence)))
+            print('validation failed for %s. len: %d %d' %
+                  (pdb_id, len(protein_sequence), len(sequence)))
             print(protein_sequence)
             continue
 
 
+'''
+4 of the pdb files generated from this cannot be loaded with data.Protein.from_pdb.
+Those are 3CRCA, 2C7EG, 3J2TB, 3VNUA, 4QREA.
+
+Also, another 4 of the train set generated pdb has differnet number of residues
+when loaded with data.Protein.from_pdb compared to the original sequence.
+Those are 5J1SB, 1MABB, 3LEVH, 3BG5A.
+'''
 if __name__ == '__main__':
     warnings.filterwarnings("ignore", message=".*discontinuous at line.*")
     warnings.filterwarnings("ignore", message=".*Unknown.*")
     print('Generate train set..')
     generate_all_in_file('../../lib/train.txt')
-    # 4 of the train set generated pdb cannot be loaded with data.Protein.from_pdb - check with `validate()`
+    '''
+    '''
+    #
     print('Generate test set..')
     generate_all_in_file('../../lib/test.txt')
-    # validate('../../lib/train.txt')
+
+    print('Validating train set..')
+    validate('../../lib/train.txt')
+    print('Validating test set..')
+    validate('../../lib/test.txt')
