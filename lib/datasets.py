@@ -181,7 +181,7 @@ class ATPBind3D(data.ProteinDataset):
             graph = self.data[index]
         with graph.residue():
             target = torch.as_tensor(
-                self.targets["binding"][index], dtype=torch.long).view(-1, 1).to('cuda')
+                self.targets["binding"][index], dtype=torch.long).view(-1, 1)
             graph.target = target
             mask = torch.ones_like(target).bool()
             graph.mask = mask
