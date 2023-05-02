@@ -14,7 +14,9 @@ class NodePropertyPrediction(tasks.Task, core.Configurable):
     _option_members = {"criterion", "metric"}
 
     def __init__(self, model, criterion="bce", metric=("macro_auprc", "macro_auroc"), num_mlp_layer=1,
-                 normalization=True, num_class=None, verbose=0):
+                 normalization=True, num_class=None, verbose=0,
+                 graph_construction_model=None,
+                 ):
         super(NodePropertyPrediction, self).__init__()
         self.model = model
         self.criterion = criterion
@@ -24,6 +26,7 @@ class NodePropertyPrediction(tasks.Task, core.Configurable):
         self.num_mlp_layer = num_mlp_layer
         self.num_class = num_class
         self.verbose = verbose
+        self.graph_construction_model = graph_construction_model
 
     def preprocess(self, train_set, valid_set, test_set):
         """
@@ -53,7 +56,14 @@ class NodePropertyPrediction(tasks.Task, core.Configurable):
 
     def predict(self, batch, all_loss=None, metric=None):
         graph = batch["graph"]
-        output = self.model(graph, graph.node_feature.float(), all_loss=all_loss, metric=metric)
+        if self.graph_construction_model:
+            graph = self.graph_construction_model(graph)
+        node_feature = graph.node_feature.float()
+        # if node_feature is of type `torch.sparse.FloatTensor`
+        # Error like "Could not run 'aten::view' with arguments from the 'SparseCPU' backend" occurs. Thus do this conversion.
+        if 'sparse' in node_feature.type():
+            node_feature = node_feature.to_dense()
+        output = self.model(graph, node_feature, all_loss=all_loss, metric=metric)
         if self.view in ["node", "atom"]:
             output_feature = output["node_feature"]
         else:

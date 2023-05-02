@@ -133,22 +133,27 @@ class ATPBind3D(data.ProteinDataset):
     splits = ["train", "valid", "test"]
     target_fields = ['binding']
     # see `generate_pdb.py`
+    # also, 4TU0A includes two alpha carbon that would not be parsed with torchprotein (number 7 / 128)
+    # This is probably because non-standard pdb file, or non-standard torchprotein parser
     deny_list = ['3CRCA', '2C7EG', '3J2TB', '3VNUA',
-                 '4QREA', '5J1SB', '1MABB', '3LEVH', '3BG5A']
+                 '4QREA', '5J1SB', '1MABB', '3LEVH', '3BG5A',
+                 '4TU0A',
+                 ]
 
-    def __init__(self, path=None, verbose=1, valid_ratio=0.1, **kwargs):
+    def __init__(self, path=None, limit=-1, valid_ratio=0.1, **kwargs):
         if path is None:
             path = os.path.dirname(__file__)
         self.num_samples = []
         self.valid_ratio = valid_ratio
-        _, targets, pdb_ids = self.get_seq_target(path)
+        _, targets, pdb_ids = self.get_seq_target(path, limit)
         pdb_files = [os.path.join(path, '../data/pdb/%s.pdb' % pdb_id)
                      for pdb_id in pdb_ids if pdb_id not in self.deny_list]
+
         self.load_pdbs(pdb_files, **kwargs)
         self.targets = defaultdict(list)
         self.targets["binding"] = targets["binding"]
 
-    def get_seq_target(self, path):
+    def get_seq_target(self, path, limit):
         sequences, targets, pdb_ids = [], [], []
 
         for file in ['train.txt', 'test.txt']:
@@ -156,6 +161,11 @@ class ATPBind3D(data.ProteinDataset):
             # Filter sequences, targets, and pdb_ids based on deny_list
             filtered_seq, filtered_tgt, filtered_ids = zip(
                 *[(s, t, i) for s, t, i in zip(seq, tgt, ids) if i not in self.deny_list])
+
+            if limit > 0:
+                filtered_seq = filtered_seq[:limit]
+                filtered_tgt = filtered_tgt[:limit]
+                filtered_ids = filtered_ids[:limit]
 
             sequences += filtered_seq
             targets += filtered_tgt
@@ -181,7 +191,7 @@ class ATPBind3D(data.ProteinDataset):
             graph = self.data[index]
         with graph.residue():
             target = torch.as_tensor(
-                self.targets["binding"][index], dtype=torch.long).view(-1, 1).to('cuda')
+                self.targets["binding"][index], dtype=torch.long).view(-1, 1)
             graph.target = target
             mask = torch.ones_like(target).bool()
             graph.mask = mask
