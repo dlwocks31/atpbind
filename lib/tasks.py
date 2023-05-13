@@ -17,7 +17,7 @@ class NodePropertyPrediction(tasks.Task, core.Configurable):
     def __init__(self, model, criterion="bce", metric=("macro_auprc", "macro_auroc"), num_mlp_layer=1,
                  normalization=True, num_class=None, verbose=0,
                  graph_construction_model=None,
-                 threshold=-1,
+                 threshold=-1.5,
                  ):
         super(NodePropertyPrediction, self).__init__()
         self.model = model
