@@ -2,7 +2,7 @@ import torch
 from torch.nn import functional as F
 from torchdrug import core, layers, metrics, tasks
 from torchdrug.layers import functional
-
+from sklearn.metrics import matthews_corrcoef as mcc_sklearn
 
 class NodePropertyPrediction(tasks.Task, core.Configurable):
     ## Nov 4: MinGyu Choi
@@ -130,6 +130,11 @@ class NodePropertyPrediction(tasks.Task, core.Configurable):
             elif _metric == "macro_acc":
                 score = pred[_labeled].argmax(-1) == _target[_labeled]
                 score = functional.variadic_mean(score.float(), _size).mean()
+            elif _metric == "mcc":
+                threshold = 0 # TODO check threshold
+                pred_inp = (pred[_labeled] > threshold).long().cpu()
+                target_inp = _target[_labeled].long().cpu()
+                score = mcc_sklearn(pred_inp, target_inp)
             else:
                 raise ValueError("Unknown criterion `%s`" % _metric)
 
