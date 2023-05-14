@@ -8,56 +8,36 @@ from collections import defaultdict
 class ATPBind(data.ProteinDataset):
     splits = ["train", "valid", "test"]
     target_fields = ['binding']
+    deny_list = []
 
-    def __init__(self, path=None, verbose=1, valid_ratio=0.1, **kwargs):
+    def __init__(self, path=None, limit=-1, verbose=1, valid_ratio=0.1, **kwargs):
         if path is None:
             path = os.path.dirname(__file__)
         self.num_samples = []
         self.valid_ratio = valid_ratio
-        sequences, targets = self.get_seq_target(path)
+        sequences, targets, _ = self.get_seq_target(path, limit)
         self.load_sequence(sequences, targets, **kwargs)
         # [20,21,41]#[350, 38, 41]
 
-    def get_seq_target(self, path):
-        sequences, targets = [], []
+    def get_seq_target(self, path, limit):
+        sequences, targets, pdb_ids = [], [], []
 
-        with open(os.path.join(path, 'train.txt')) as f:
-            lines = f.readlines()
-            self.num_samples.append(len(lines))
-            for line in lines:
-                sequence = line.split(' : ')[-1].strip()
-                sequences.append(sequence)
+        for file in ['train.txt', 'test.txt']:
+            num_samples, seq, tgt, ids = read_file(os.path.join(path, file))
+            # Filter sequences, targets, and pdb_ids based on deny_list
+            filtered_seq, filtered_tgt, filtered_ids = zip(
+                *[(s, t, i) for s, t, i in zip(seq, tgt, ids) if i not in self.deny_list])
 
-                target = line.split(' : ')[-2].split(' ')
-                target_indices = []
-                for index in target:
-                    target_indices.append(int(index[1:]))
-                target = []
-                for index in range(len(sequence)):
-                    if index+1 in target_indices:
-                        target.append(1)
-                    else:
-                        target.append(0)
-                targets.append(target)
+            if limit > 0:
+                filtered_seq = filtered_seq[:limit]
+                filtered_tgt = filtered_tgt[:limit]
+                filtered_ids = filtered_ids[:limit]
 
-        with open(os.path.join(path, 'test.txt')) as f:
-            lines = f.readlines()
-            self.num_samples.append(len(lines))
-            for line in lines:
-                sequence = line.split(' : ')[-1].strip()
-                sequences.append(sequence)
+            sequences += filtered_seq
+            targets += filtered_tgt
+            pdb_ids += filtered_ids
 
-                target = line.split(' : ')[-2].split(' ')
-                target_indices = []
-                for index in target:
-                    target_indices.append(int(index[1:]))
-                target = []
-                for index in range(len(sequence)):
-                    if index+1 in target_indices:
-                        target.append(1)
-                    else:
-                        target.append(0)
-                targets.append(target)
+            self.num_samples.append(len(filtered_seq))
 
         # calculate set lengths
         total_samples = sum(self.num_samples)
@@ -67,7 +47,7 @@ class ATPBind(data.ProteinDataset):
         print('Split num: ', self.num_samples)
 
         targets_ = {"binding": targets}
-        return sequences, targets_
+        return sequences, targets_, pdb_ids
 
     def get_item(self, index):
         if self.lazy:
