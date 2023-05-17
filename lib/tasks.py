@@ -2,6 +2,7 @@ import torch
 from torch.nn import functional as F
 from torchdrug import core, layers, metrics, tasks
 from torchdrug.layers import functional
+from sklearn.metrics import matthews_corrcoef as mcc_sklearn
 
 
 class NodePropertyPrediction(tasks.Task, core.Configurable):
@@ -16,6 +17,7 @@ class NodePropertyPrediction(tasks.Task, core.Configurable):
     def __init__(self, model, criterion="bce", metric=("macro_auprc", "macro_auroc"), num_mlp_layer=1,
                  normalization=True, num_class=None, verbose=0,
                  graph_construction_model=None,
+                 threshold=-1.5,
                  ):
         super(NodePropertyPrediction, self).__init__()
         self.model = model
@@ -27,6 +29,7 @@ class NodePropertyPrediction(tasks.Task, core.Configurable):
         self.num_class = num_class
         self.verbose = verbose
         self.graph_construction_model = graph_construction_model
+        self.threshold = threshold
 
     def preprocess(self, train_set, valid_set, test_set):
         """
@@ -111,7 +114,9 @@ class NodePropertyPrediction(tasks.Task, core.Configurable):
 
         return all_loss, metric
 
-    def evaluate(self, pred, target):
+    def evaluate(self, pred, target, threshold=None):
+        if threshold is None:
+            threshold = self.threshold
         metric = {}
         _target = target["label"]
         _labeled = ~torch.isnan(_target) & target["mask"]
@@ -130,10 +135,14 @@ class NodePropertyPrediction(tasks.Task, core.Configurable):
             elif _metric == "macro_acc":
                 score = pred[_labeled].argmax(-1) == _target[_labeled]
                 score = functional.variadic_mean(score.float(), _size).mean()
+            elif _metric == "mcc":
+                pred_inp = (pred[_labeled] > threshold).long().cpu()
+                target_inp = _target[_labeled].long().cpu()
+                score = mcc_sklearn(pred_inp, target_inp)
             else:
                 raise ValueError("Unknown criterion `%s`" % _metric)
 
-            name = tasks._get_metric_name(_metric)
+            name = tasks._get_metric_name(_metric) if _metric != 'mcc' else 'mcc'
             metric[name] = score
 
         return metric
