@@ -7,6 +7,7 @@ from torch.utils import data as torch_data
 from torch.nn import functional as F
 import logging
 import numpy as np
+from functools import cache
 
 from .tasks import NodePropertyPrediction
 from .datasets import ATPBind
@@ -18,6 +19,22 @@ class DisableLogger():
     def __exit__(self, exit_type, exit_value, exit_traceback):
        logging.disable(logging.NOTSET)
     
+@cache
+def get_dataset(dataset):
+    print(f'get dataset {dataset}')
+    if dataset == 'atpbind':
+        truncuate_transform = transforms.TruncateProtein(max_length=350, random=False)
+        protein_view_transform = transforms.ProteinView(view='residue')
+        transform = transforms.Compose([truncuate_transform, protein_view_transform])
+
+        dataset = ATPBind(atom_feature=None, bond_feature=None,
+                        residue_feature="default", transform=transform)
+
+        train_set, valid_set, test_set = dataset.split()
+        print("train samples: %d, valid samples: %d, test samples: %d" %
+            (len(train_set), len(valid_set), len(test_set)))
+        
+        return train_set, valid_set, test_set
 
 class Pipeline:
     possible_models = ['bert']
@@ -39,18 +56,7 @@ class Pipeline:
         elif model == 'lm-gearnet':
             pass
             
-        if dataset == 'atpbind':
-            truncuate_transform = transforms.TruncateProtein(max_length=350, random=False)
-            protein_view_transform = transforms.ProteinView(view='residue')
-            transform = transforms.Compose([truncuate_transform, protein_view_transform])
-
-            dataset = ATPBind(atom_feature=None, bond_feature=None,
-                            residue_feature="default", transform=transform)
-
-            self.train_set, self.valid_set, self.test_set = dataset.split()
-            print("train samples: %d, valid samples: %d, test samples: %d" %
-                (len(self.train_set), len(self.valid_set), len(self.test_set)))
-            
+        self.train_set, self.valid_set, self.test_set = get_dataset(dataset)
         
         self.task = NodePropertyPrediction(
             self.model, 
@@ -68,7 +74,7 @@ class Pipeline:
                                         self.test_set,
                                         optimizer,
                                         batch_size=1,
-                                        log_interval=1000,
+                                        log_interval=1000000000,
                                         gpus=gpus
             )
         
@@ -99,7 +105,7 @@ class Pipeline:
             )['mcc']
             mcc_values[i] = mcc_values[i] + mcc
         threshold = thresholds[np.argmax(mcc_values)]
-        print(f'threshold:{threshold}\n')
+        print(f'threshold: {threshold}\n')
         self.task.threshold = threshold
         return self.solver.evaluate("test")
         
