@@ -105,9 +105,10 @@ class Pipeline:
             )['mcc']
             mcc_values[i] = mcc_values[i] + mcc
         threshold = thresholds[np.argmax(mcc_values)]
-        print(f'threshold: {threshold}\n')
+        # print(f'threshold: {threshold}\n')
         self.task.threshold = threshold
-        return self.solver.evaluate("test")
+        result = self.solver.evaluate("test")
+        
         
         
         
