@@ -1,13 +1,15 @@
 import argparse
+
 from torchdrug import datasets, transforms
 from torchdrug import layers, tasks, core, models
 from torchdrug.layers import geometry
 import torch
 from lib.disable_logger import DisableLogger
+from lib.custom_models import LMGearNetModel
+
 import os
 from time import sleep
 import traceback
-
 
 
 def parse_args():
@@ -20,7 +22,7 @@ def parse_args():
                         help="Number of hidden dimensions")
     parser.add_argument("--hidden_dim_size", type=int, default=512,
                         help="Size of each hidden dimension")
-    parser.add_argument("--batch_size", type=int, default=8,
+    parser.add_argument("--batch_size", type=int, default=1,
                         help="Batch size for training")
     return parser.parse_args()
 
@@ -29,7 +31,7 @@ def main():
     # https://wsshin.tistory.com/12
     os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
     os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-    
+
     args = parse_args()
 
     # Load dataset
@@ -54,11 +56,12 @@ def main():
                                                                      geometry.SequentialEdge(max_distance=2)],
                                                         edge_feature="gearnet")
 
-    gearnet_edge = models.GearNet(input_dim=21, hidden_dims=[args.hidden_dim_size]*args.hidden_dim_count,
-                                  num_relation=7, edge_input_dim=59, num_angle_bin=8,
-                                  batch_norm=True, concat_hidden=True, short_cut=True, readout="sum")
+    lm_gearnet = LMGearNetModel(args.gpu,
+                                gearnet_hidden_dim_size=args.hidden_dim_size, 
+                                gearnet_hidden_dim_count=args.hidden_dim_count
+                                )
 
-    task = tasks.AttributeMasking(gearnet_edge, graph_construction_model=graph_construction_model,
+    task = tasks.AttributeMasking(lm_gearnet, graph_construction_model=graph_construction_model,
                                   mask_rate=0.15, num_mlp_layer=2)
 
     optimizer = torch.optim.Adam(task.parameters(), lr=1e-4)
@@ -70,26 +73,25 @@ def main():
     if args.pretrained is not None:
         # Load pretrained model
         solver.load(args.pretrained)
-    
+
     while True:
         try:
             solver.train(num_epoch=1)
-        except RuntimeError as e:
+        except (RuntimeError, IndexError) as e:
             print(e)
             print("RuntimeError occurred. Continue training")
             sleep(60)
-        
-        validate_and_save(solver, args)
+
+        validate_and_save(solver, lm_gearnet, args)
 
 
-
-def validate_and_save(solver, args):
+def validate_and_save(solver, lm_gearnet, args):
     fail_cnt = 0
     while True:
         try:
             result = solver.evaluate("valid")
             break
-        except RuntimeError as e:
+        except (RuntimeError, IndexError) as e:
             print(e)
             fail_cnt += 1
             if fail_cnt == 10:
@@ -97,15 +99,15 @@ def validate_and_save(solver, args):
                 exit(0)
             print("Detailed stack trace:")
             traceback.print_exc()  # print detailed stack trace
-            print(f"RuntimeError occurred: fail_cnt = {fail_cnt}. Continue validating")
+            print(
+                f"RuntimeError occurred: fail_cnt = {fail_cnt}. Continue validating")
             sleep(60)
 
-    solver.save("ResidueType_%d_%d_%.5f.pth" %
-                (args.hidden_dim_count, 
-                args.hidden_dim_size, 
-                result['accuracy'].item()))
-    
-    
+    torch.save(lm_gearnet.gearnet.state_dict(), "ResidueType_lmg_%d_%d_%.5f.pth" %
+                (args.hidden_dim_count,
+                 args.hidden_dim_size,
+                 result['accuracy'].item()))
+
 
 if __name__ == "__main__":
     main()
