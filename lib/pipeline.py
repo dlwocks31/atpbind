@@ -35,12 +35,15 @@ def get_dataset(dataset):
             (len(train_set), len(valid_set), len(test_set)))
         
         return train_set, valid_set, test_set
-    elif dataset == 'atpbind3d':
+    elif dataset == 'atpbind3d' or dataset == 'atpbind3d-minimal':
         truncuate_transform = transforms.TruncateProtein(max_length=350, random=False)
         protein_view_transform = transforms.ProteinView(view='residue')
         transform = transforms.Compose([truncuate_transform, protein_view_transform])
 
-        dataset = ATPBind3D(transform=transform)
+        if dataset == 'atpbind3d':
+            dataset = ATPBind3D(transform=transform)
+        elif dataset == 'atpbind3d-minimal':
+            dataset = ATPBind3D(transform=transform, limit=5)
 
         train_set, valid_set, test_set = dataset.split()
         print("train samples: %d, valid samples: %d, test samples: %d" %
@@ -50,7 +53,7 @@ def get_dataset(dataset):
 
 class Pipeline:
     possible_models = ['bert', 'gearnet', 'lm-gearnet']
-    possible_datasets = ['atpbind', 'atpbind3d']
+    possible_datasets = ['atpbind', 'atpbind3d', 'atpbind3d-minimal']
     threshold = 0
     
     def __init__(self, model, dataset, gpus, model_kwargs={}, task_kwargs={}):
@@ -80,7 +83,7 @@ class Pipeline:
                 metric=("micro_auroc", "mcc"),
                 **task_kwargs
             )
-        elif dataset == 'atpbind3d':
+        elif dataset == 'atpbind3d' or dataset == 'atpbind3d-minimal':
             graph_construction_model = layers.GraphConstruction(
                 node_layers=[geometry.AlphaCarbonNode()],
                 edge_layers=[geometry.SpatialEdge(radius=10.0, min_distance=5),
