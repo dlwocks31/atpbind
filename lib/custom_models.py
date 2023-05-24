@@ -83,6 +83,23 @@ class LMGearNetModel(torch.nn.Module, core.Configurable):
         # print(f'lm_output shape: {lm_output.shape}')
         gearnet_output = self.gearnet(graph, lm_output)
         return gearnet_output
+    
+    def freeze_gearnet(self, freeze_all=False, freeze_layer_count=0):
+        if freeze_all:
+            for param in self.gearnet.parameters():
+                param.requires_grad = False
+        elif freeze_layer_count != 0:
+            for layer in self.gearnet.layers[:freeze_layer_count]:
+                for param in layer.parameters():
+                    param.requires_grad = False
+
+            for layer in self.gearnet.edge_layers[:freeze_layer_count]:
+                for param in layer.parameters():
+                    param.requires_grad = False
+
+            for layer in self.gearnet.batch_norms[:freeze_layer_count]:
+                for param in layer.parameters():
+                    param.requires_grad = False
 
 
 class GearNetWrapModel(torch.nn.Module, core.Configurable):

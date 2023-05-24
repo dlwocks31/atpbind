@@ -5,13 +5,30 @@ import torch
 
 DATA_FILE_PATH = 'gearnet_pretrained_pipeline.json'
 TOTAL_LAYER_COUNT = 9
-PRETRAINED_WEIGHT = 'ResidueType_9_512_0.38827.pth'
-GPU = 2
+PRETRAINED_WEIGHT = {
+    6: 'ResidueType_6_512_0.38472.pth',
+    8: 'ResidueType_8_512_0.37701.pth',
+    9: 'ResidueType_9_512_0.38827.pth'
+}
 
-def run_exp(data, layer, trial):
+GPU = 1
+
+def exp_record_exists(data, parameters):
+    for record in data:
+        if all(record[k] == v for k, v in parameters.items()):
+            return True
+    return False
+
+
+def run_exp(data, layer, trial, pretrained_layers):
+    parameters = {
+        "layer": layer,
+        "pretrained_layers": pretrained_layers,
+        "trial": trial,
+    }
     # check if the experiment has been run
-    if any(d['layer'] == layer and d['trial'] == trial for d in data):
-        print(f'Experiment {layer}-{trial} has been run, skip')
+    if exp_record_exists(data, parameters):
+        print(f'Experiment {parameters} has been run, skip')
         return
     
     pipeline = Pipeline(
@@ -20,13 +37,15 @@ def run_exp(data, layer, trial):
         gpus=[GPU],
         model_kwargs={
             'input_dim': 21,
-            'hidden_dims': [512] * 9,
+            'hidden_dims': [512] * pretrained_layers,
             'gpu': GPU,
         }
      )
     
+    pretrained_weight = PRETRAINED_WEIGHT[pretrained_layers]
+    
     # load pretrained weight
-    state_dict = torch.load(PRETRAINED_WEIGHT)
+    state_dict = torch.load(pretrained_weight)
     new_state_dict = {}
     for k in state_dict['model'].keys():
         if k.startswith("model"):
@@ -40,14 +59,16 @@ def run_exp(data, layer, trial):
     for epoch in range(5):
         with DisableLogger():
             pipeline.train(num_epoch=1)
-            data.append({"layer": layer, "trial": trial, "epoch": epoch, "data": pipeline.evaluate()})
+            data.append(parameters | {
+                "epoch": epoch,
+                "data": pipeline.evaluate()
+            })
         print(data[-1])
     
-    data.sort(key=lambda x: (x["layer"], x["trial"], x["epoch"]))
+    data.sort(key=lambda x: (x["pretrained_layers"], x["layer"], x["trial"], x["epoch"]))
     with open(DATA_FILE_PATH, 'w') as f:
         json.dump(data, f)
     
-
 
 def main():
     try:
@@ -57,9 +78,10 @@ def main():
         # File does not exist, or it is empty
         data = []
 
-    for layer in range(0, 9):
-        for trial in range(3):
-            run_exp(data, layer, trial)
+    for pretrained_layers in [6, 8, 9]:
+        for layer in range(0, pretrained_layers):
+            for trial in range(1):
+                run_exp(data=data, layer=layer, trial=trial, pretrained_layers=pretrained_layers)
 
 if __name__ == '__main__':
     main()
