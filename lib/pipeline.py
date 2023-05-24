@@ -1,6 +1,5 @@
-from torchdrug import transforms
-from torchdrug import data, core, layers, tasks, metrics, utils, models
-from torchdrug.layers import functional
+from torchdrug import transforms, data, core, layers, tasks, metrics, utils, models
+from torchdrug.layers import functional, geometry
 from torchdrug.core import Registry as R
 import torch
 from torch.utils import data as torch_data
@@ -10,8 +9,9 @@ import numpy as np
 from functools import cache
 
 from .tasks import NodePropertyPrediction
-from .datasets import ATPBind
+from .datasets import ATPBind, ATPBind3D
 from .bert import BertWrapModel
+from .custom_models import GearNetWrapModel, LMGearNetModel
 
 class DisableLogger():
     def __enter__(self):
@@ -35,10 +35,22 @@ def get_dataset(dataset):
             (len(train_set), len(valid_set), len(test_set)))
         
         return train_set, valid_set, test_set
+    elif dataset == 'atpbind3d':
+        truncuate_transform = transforms.TruncateProtein(max_length=350, random=False)
+        protein_view_transform = transforms.ProteinView(view='residue')
+        transform = transforms.Compose([truncuate_transform, protein_view_transform])
+
+        dataset = ATPBind3D(transform=transform)
+
+        train_set, valid_set, test_set = dataset.split()
+        print("train samples: %d, valid samples: %d, test samples: %d" %
+              (len(train_set), len(valid_set), len(test_set)))
+        
+        return train_set, valid_set, test_set
 
 class Pipeline:
-    possible_models = ['bert']
-    possible_datasets = ['atpbind']
+    possible_models = ['bert', 'gearnet', 'lm-gearnet']
+    possible_datasets = ['atpbind', 'atpbind3d']
     threshold = 0
     
     def __init__(self, model, dataset, gpus, model_kwargs={}, task_kwargs={}):
@@ -49,22 +61,40 @@ class Pipeline:
     
         if dataset not in self.possible_datasets:
             raise ValueError('Dataset must be one of {}'.format(self.possible_datasets))
-                
-        if model == 'bert':
-            with DisableLogger():
+           
+        with DisableLogger():     
+            if model == 'bert':
                 self.model = BertWrapModel(**model_kwargs)
-        elif model == 'lm-gearnet':
-            pass
-            
+            elif model == 'gearnet':
+                self.model = GearNetWrapModel(**model_kwargs)
+            elif model == 'lm-gearnet':
+                self.model = LMGearNetModel(**model_kwargs)
+        
         self.train_set, self.valid_set, self.test_set = get_dataset(dataset)
         
-        self.task = NodePropertyPrediction(
-            self.model, 
-            normalization=False,
-            num_mlp_layer=2,
-            metric=("micro_auroc", "mcc"),
-            **task_kwargs
-        )
+        if dataset == 'atpbind':
+            self.task = NodePropertyPrediction(
+                self.model, 
+                normalization=False,
+                num_mlp_layer=2,
+                metric=("micro_auroc", "mcc"),
+                **task_kwargs
+            )
+        elif dataset == 'atpbind3d':
+            graph_construction_model = layers.GraphConstruction(
+                node_layers=[geometry.AlphaCarbonNode()],
+                edge_layers=[geometry.SpatialEdge(radius=10.0, min_distance=5),
+                             geometry.KNNEdge(k=10, min_distance=5),
+                             geometry.SequentialEdge(max_distance=2)],
+                edge_feature="gearnet"
+            )
+            self.task = NodePropertyPrediction(
+                self.model,
+                graph_construction_model=graph_construction_model,
+                normalization=False,
+                num_mlp_layer=2,
+                metric=("micro_auroc", "mcc")
+            )
         
         optimizer = torch.optim.Adam(self.model.parameters(), lr=1e-3)
         with DisableLogger():
@@ -107,7 +137,8 @@ class Pipeline:
         threshold = thresholds[np.argmax(mcc_values)]
         # print(f'threshold: {threshold}\n')
         self.task.threshold = threshold
-        result = self.solver.evaluate("test")
+        return {k: v.item() if k == 'micro_auroc' else v 
+                for (k, v) in self.solver.evaluate("test").items()}
         
         
         
