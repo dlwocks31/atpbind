@@ -4,7 +4,6 @@ from lib.disable_logger import DisableLogger
 import torch
 
 DATA_FILE_PATH = 'gearnet_pretrained_pipeline.json'
-TOTAL_LAYER_COUNT = 9
 PRETRAINED_WEIGHT = {
     6: 'ResidueType_6_512_0.38472.pth',
     8: 'ResidueType_8_512_0.37701.pth',
@@ -80,7 +79,7 @@ def main():
 
     for pretrained_layers in [6, 8, 9]:
         for layer in range(0, pretrained_layers):
-            for trial in range(1):
+            for trial in range(3):
                 run_exp(data=data, layer=layer, trial=trial, pretrained_layers=pretrained_layers)
 
 if __name__ == '__main__':
