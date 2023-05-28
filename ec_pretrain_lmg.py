@@ -28,9 +28,9 @@ def parse_args():
 
 
 def main():
-    # https://wsshin.tistory.com/12
-    os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
-    os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+    # # https://wsshin.tistory.com/12
+    # os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
+    # os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
     args = parse_args()
 
