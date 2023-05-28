@@ -6,7 +6,7 @@ import torch
 DATA_FILE_PATH = 'lmg_pretrained_pipeline.json'
 PRETRAINED_WEIGHT = {
     3: 'ResidueType_lmg_3_512_0.54631.pth',
-    4: 'ResidueType_lmg_4_512_0.55580.pth',
+    4: 'ResidueType_lmg_4_512_0.57268.pth',
     6: 'ResidueType_lmg_6_512_0.55843.pth',   
 }
 GPU = 3
@@ -61,7 +61,7 @@ def run_exp(data, gearnet_freeze_layer, bert_freeze_layer, pretrained_layers, tr
     data.sort(key=lambda x: (x["gearnet_freeze_layer"],
               x["bert_freeze_layer"], x["pretrained_layers"], x["trial"], x["epoch"]))
     with open(DATA_FILE_PATH, 'w') as f:
-        json.dump(data, f)
+        json.dump(data, f, indent=2)
 
 
 def main():
