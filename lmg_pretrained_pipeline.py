@@ -6,9 +6,10 @@ import torch
 DATA_FILE_PATH = 'lmg_pretrained_pipeline.json'
 PRETRAINED_WEIGHT = {
     3: 'ResidueType_lmg_3_512_0.54631.pth',
+    4: 'ResidueType_lmg_4_512_0.55580.pth',
     6: 'ResidueType_lmg_6_512_0.55843.pth',   
 }
-GPU = 0
+GPU = 3
 
 def exp_record_exists(data, parameters):
     for record in data:
@@ -74,10 +75,10 @@ def main():
     # add default "pretrained_layers = 6" for each entry
     data = [{"pretrained_layers": 6} | d for d in data]
 
-    for trial in range(3):
+    for trial in range(5):
         for gearnet_freeze_layer in range(0, 6):
             for bert_freeze_layer in range(29, 31):
-                for pretrained_layers in [3, 6]:
+                for pretrained_layers in [3, 4, 6]:
                     run_exp(
                         data = data,
                         gearnet_freeze_layer=gearnet_freeze_layer,
