@@ -52,7 +52,7 @@ def get_dataset(dataset):
         return train_set, valid_set, test_set
 
 class Pipeline:
-    possible_models = ['bert', 'gearnet', 'lm-gearnet']
+    possible_models = ['bert', 'gearnet', 'lm-gearnet', 'cnn']
     possible_datasets = ['atpbind', 'atpbind3d', 'atpbind3d-minimal']
     threshold = 0
     
@@ -72,6 +72,8 @@ class Pipeline:
                 self.model = GearNetWrapModel(**model_kwargs)
             elif model == 'lm-gearnet':
                 self.model = LMGearNetModel(**model_kwargs)
+            elif model == 'cnn':
+                self.model = models.ProteinCNN(**model_kwargs)
         
         self.train_set, self.valid_set, self.test_set = get_dataset(dataset)
         
