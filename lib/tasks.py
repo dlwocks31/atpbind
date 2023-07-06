@@ -100,6 +100,15 @@ class NodePropertyPrediction(tasks.Task, core.Configurable):
                     loss = F.mse_loss(pred, target, reduction="none")
             elif criterion == "bce":
                 loss = F.binary_cross_entropy_with_logits(pred, target["label"].float(), reduction="none")
+            elif criterion == "bce_positive":
+                loss = F.binary_cross_entropy_with_logits(
+                    pred, target["label"].float(), reduction="none")
+                loss = F.binary_cross_entropy_with_logits(
+                    pred, target["label"].float(), reduction="none")
+                loss = loss * target["label"].float()
+            elif criterion == "bce_negative":
+                loss = F.binary_cross_entropy_with_logits(pred, target["label"].float(), reduction="none")
+                loss = loss * (1 - target["label"].float())
             elif criterion == "ce":
                 loss = F.cross_entropy(pred, target["label"], reduction="none")
             else:
@@ -121,6 +130,10 @@ class NodePropertyPrediction(tasks.Task, core.Configurable):
         _target = target["label"]
         _labeled = ~torch.isnan(_target) & target["mask"]
         _size = functional.variadic_sum(_labeled.long(), target["size"]) .view(-1)
+        
+        pred_binary = (pred[_labeled] > threshold).long().cpu()
+        tp, tn, fp, fn = self._calculate_base_metrics(pred_binary, _target[_labeled].long().cpu())
+        
         for _metric in self.metric:
             if _metric == "micro_acc":
                 score = metrics.accuracy(pred[_labeled], _target[_labeled].long())
@@ -136,9 +149,16 @@ class NodePropertyPrediction(tasks.Task, core.Configurable):
                 score = pred[_labeled].argmax(-1) == _target[_labeled]
                 score = functional.variadic_mean(score.float(), _size).mean()
             elif _metric == "mcc":
-                pred_inp = (pred[_labeled] > threshold).long().cpu()
                 target_inp = _target[_labeled].long().cpu()
-                score = mcc_sklearn(pred_inp, target_inp)
+                score = mcc_sklearn(pred_binary, target_inp)
+            elif _metric == "sensitivity":
+                score = tp / (tp + fn)
+            elif _metric == "specificity":
+                score = tn / (tn + fp)
+            elif _metric == "accuracy":
+                score = (tp + tn) / (tp + tn + fp + fn)
+            elif _metric == "precision":
+                score = tp / (tp + fp)
             else:
                 raise ValueError("Unknown criterion `%s`" % _metric)
 
@@ -146,3 +166,11 @@ class NodePropertyPrediction(tasks.Task, core.Configurable):
             metric[name] = score
 
         return metric
+
+    def _calculate_base_metrics(self, pred, target):
+        tp = (pred * target).sum()
+        tn = ((1 - pred) * (1 - target)).sum()
+        fp = ((1 - target) * pred).sum()
+        fn = (target * (1 - pred)).sum()
+        assert(tp + tn + fp + fn == len(pred))
+        return tp, tn, fp, fn

@@ -116,13 +116,16 @@ class Pipeline:
     def train(self, num_epoch):
         return self.solver.train(num_epoch=num_epoch)
     
-    def evaluate(self):
+    def evaluate(self, threshold_set='valid'):
         preds = []
         targets = []
         thresholds = np.linspace(-3, 1, num=400)
         mcc_values = [0 for i in range(len(thresholds))]
 
-        dataloader = data.DataLoader(self.valid_set, batch_size=1, shuffle=False)
+        if threshold_set == 'valid':
+            dataloader = data.DataLoader(self.valid_set, batch_size=1, shuffle=False)
+        elif threshold_set == 'test':
+            dataloader = data.DataLoader(self.test_set, batch_size=1, shuffle=False)
 
         with torch.no_grad():
             for batch in dataloader:
