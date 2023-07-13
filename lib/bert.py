@@ -48,15 +48,19 @@ class BertWrapModel(torch.nn.Module, core.Configurable):
         self.output_dim = self.bert_model.config.hidden_size
 
     def forward(self, graph, _, all_loss=None, metric=None):
-        # print("graph: ", graph)
-        # print("sequence: ", graph.to_sequence())
         input = [seq.replace('.', ' ') for seq in graph.to_sequence()]
+        input_len = [len(seq.replace(' ', '')) for seq in input]
 
+        # At large batch size, tokenization becomes the bottleneck
         encoded_input = self.bert_tokenizer(
             input, return_tensors='pt').to('cuda')
-        # print("Input size: ", encoded_input["input_ids"].size())
-        x = self.bert_model(**encoded_input)
-        # print("Output size just after model: ", x.last_hidden_state.size())
+        embedding_rpr = self.bert_model(**encoded_input)
+        
+        residue_feature = []
+        for i, emb in enumerate(embedding_rpr.last_hidden_state):
+            # skip residue feature for [CLS] and [SEP], since they are not in the original sequence
+            residue_feature.append(emb[1:1+input_len[i]])
+        
+        x = torch.cat(residue_feature)
 
-        # skip residue feature for [CLS] and [SEP], since they are not in the original sequence
-        return {"residue_feature": torch.squeeze(x.last_hidden_state)[1:-1]}
+        return {"residue_feature": x}
