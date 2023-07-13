@@ -176,3 +176,5 @@ pyrightconfig.json
 
 data/weight/**
 .vscode
+
+_playground/
