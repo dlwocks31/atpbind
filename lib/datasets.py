@@ -176,7 +176,7 @@ class ATPBind3D(data.ProteinDataset):
             mask = torch.ones_like(target).bool()
             graph.mask = mask
         graph.view = 'residue'
-        item = {"graph": graph, "targets": target}
+        item = {"graph": graph}
         if self.transform:
             item = self.transform(item)
         return item
