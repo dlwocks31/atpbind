@@ -56,7 +56,7 @@ class Pipeline:
     possible_datasets = ['atpbind', 'atpbind3d', 'atpbind3d-minimal']
     threshold = 0
     
-    def __init__(self, model, dataset, gpus, model_kwargs={}, task_kwargs={}):
+    def __init__(self, model, dataset, gpus, model_kwargs={}, task_kwargs={}, batch_size=1):
         self.gpus = gpus
 
         if model not in self.possible_models:
@@ -108,7 +108,7 @@ class Pipeline:
                                         self.valid_set,
                                         self.test_set,
                                         optimizer,
-                                        batch_size=1,
+                                        batch_size=batch_size,
                                         log_interval=1000000000,
                                         gpus=gpus
             )
