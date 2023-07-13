@@ -18,6 +18,7 @@ class NodePropertyPrediction(tasks.Task, core.Configurable):
                  normalization=True, num_class=None, verbose=0,
                  graph_construction_model=None,
                  threshold=-1.5,
+                 bce_weight=1.0,
                  ):
         super(NodePropertyPrediction, self).__init__()
         self.model = model
@@ -30,6 +31,7 @@ class NodePropertyPrediction(tasks.Task, core.Configurable):
         self.verbose = verbose
         self.graph_construction_model = graph_construction_model
         self.threshold = threshold
+        self.bce_weight = torch.Tensor([bce_weight])
 
     def preprocess(self, train_set, valid_set, test_set):
         """
@@ -99,16 +101,7 @@ class NodePropertyPrediction(tasks.Task, core.Configurable):
                 else:
                     loss = F.mse_loss(pred, target, reduction="none")
             elif criterion == "bce":
-                loss = F.binary_cross_entropy_with_logits(pred, target["label"].float(), reduction="none")
-            elif criterion == "bce_positive":
-                loss = F.binary_cross_entropy_with_logits(
-                    pred, target["label"].float(), reduction="none")
-                loss = F.binary_cross_entropy_with_logits(
-                    pred, target["label"].float(), reduction="none")
-                loss = loss * target["label"].float()
-            elif criterion == "bce_negative":
-                loss = F.binary_cross_entropy_with_logits(pred, target["label"].float(), reduction="none")
-                loss = loss * (1 - target["label"].float())
+                loss = F.binary_cross_entropy_with_logits(pred, target["label"].float(), reduction="none", pos_weight=self.bce_weight)
             elif criterion == "ce":
                 loss = F.cross_entropy(pred, target["label"], reduction="none")
             else:

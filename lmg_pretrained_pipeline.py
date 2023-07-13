@@ -3,34 +3,16 @@ from lib.pipeline import Pipeline
 from lib.disable_logger import DisableLogger
 import torch
 
-DATA_FILE_PATH = 'lmg_pretrained_pipeline.json'
+DATA_FILE_PATH = 'lmg_pretrained_pipeline_v2.json'
 PRETRAINED_WEIGHT = {
     3: 'ResidueType_lmg_3_512_0.54631.pth',
     4: 'ResidueType_lmg_4_512_0.57268.pth',
     6: 'ResidueType_lmg_6_512_0.55843.pth',   
 }
-GPU = 3
+GPU = 0
 
-def exp_record_exists(data, parameters):
-    for record in data:
-        if all(record[k] == v for k, v in parameters.items()):
-            return True
-    return False
-
-
-def run_exp(data, gearnet_freeze_layer, bert_freeze_layer, pretrained_layers, trial):
-    parameters = {
-        "gearnet_freeze_layer": gearnet_freeze_layer,
-        "bert_freeze_layer": bert_freeze_layer,
-        "pretrained_layers": pretrained_layers,
-        "trial": trial,
-    }
-    # check if the experiment has been run
-    if exp_record_exists(data, parameters):
-        print(
-            f'Experiment {parameters} has been run, skip')
-        return
-
+# run experiment without storing data
+def run_exp_pure(gearnet_freeze_layer, bert_freeze_layer, pretrained_layers, bce_weight=1.0):
     pipeline = Pipeline(
         model='lm-gearnet',
         dataset='atpbind3d',
@@ -41,27 +23,41 @@ def run_exp(data, gearnet_freeze_layer, bert_freeze_layer, pretrained_layers, tr
             'gearnet_hidden_dim_count': pretrained_layers,
             'bert_freeze': bert_freeze_layer == 30,
             'bert_freeze_layer_count': bert_freeze_layer,
-        })
-    
+        },
+        task_kwargs={
+            'bce_weight': bce_weight,
+        }
+    )
+        
     state_dict = torch.load(PRETRAINED_WEIGHT[pretrained_layers])
     pipeline.model.gearnet.load_state_dict(state_dict)
     pipeline.model.freeze_gearnet(freeze_layer_count=gearnet_freeze_layer)
 
-
-
+    train_record = []
     for epoch in range(5):
         with DisableLogger():
             pipeline.train(num_epoch=1)
-            data.append(parameters | {
+            train_record.append({
                 "epoch": epoch,
                 "data": pipeline.evaluate()
             })
-        print(data[-1])
+        print(train_record[-1])
+    return train_record
 
-    data.sort(key=lambda x: (x["gearnet_freeze_layer"],
-              x["bert_freeze_layer"], x["pretrained_layers"], x["trial"], x["epoch"]))
-    with open(DATA_FILE_PATH, 'w') as f:
-        json.dump(data, f, indent=2)
+
+def append_to_data(file_data, parameters, trial):
+    '''
+    file_data: list of {parameters: dict, trials: list}
+    parameters: dict
+    trial: dict
+
+    This function would find the entry in file_data with the same parameters
+    and append the trial to the trials list.
+    '''
+    for entry in file_data:
+        if all(entry['parameters'][k] == v for k, v in parameters.items()):
+            entry['trials'].append(trial)
+            return
 
 
 def main():
@@ -72,20 +68,20 @@ def main():
         # File does not exist, or it is empty
         data = []
 
-    # add default "pretrained_layers = 6" for each entry
-    data = [{"pretrained_layers": 6} | d for d in data]
-
-    for trial in range(5):
-        for gearnet_freeze_layer in range(0, 6):
-            for bert_freeze_layer in range(29, 31):
-                for pretrained_layers in [3, 4, 6]:
-                    run_exp(
-                        data = data,
-                        gearnet_freeze_layer=gearnet_freeze_layer,
-                        bert_freeze_layer=bert_freeze_layer, 
-                        pretrained_layers=pretrained_layers,
-                        trial = trial
-                    )
+    for gearnet_freeze_layer in range(1, 2):
+        for bert_freeze_layer in range(29, 30):
+            for pretrained_layers in [4]:
+                for bce_weight in [4, 2, 1, 0.5, 0.25]:
+                    parameters = {
+                        "gearnet_freeze_layer": gearnet_freeze_layer,
+                        "bert_freeze_layer": bert_freeze_layer,
+                        "pretrained_layers": pretrained_layers,
+                        "bce_weight": bce_weight,
+                    }
+                    result = run_exp_pure(**parameters)
+                    append_to_data(data, parameters, result)
+                    with open(DATA_FILE_PATH, 'w') as f:
+                        json.dump(data, f, indent=2)
 
 
 if __name__ == '__main__':

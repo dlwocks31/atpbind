@@ -51,6 +51,7 @@ def get_dataset(dataset):
         
         return train_set, valid_set, test_set
 
+METRICS_USING = ("micro_auroc", "mcc", "accuracy", "precision", "sensitivity", "specificity")
 class Pipeline:
     possible_models = ['bert', 'gearnet', 'lm-gearnet', 'cnn']
     possible_datasets = ['atpbind', 'atpbind3d', 'atpbind3d-minimal']
@@ -82,7 +83,7 @@ class Pipeline:
                 self.model, 
                 normalization=False,
                 num_mlp_layer=2,
-                metric=("micro_auroc", "mcc"),
+                metric=METRICS_USING,
                 **task_kwargs
             )
         elif dataset == 'atpbind3d' or dataset == 'atpbind3d-minimal':
@@ -98,7 +99,7 @@ class Pipeline:
                 graph_construction_model=graph_construction_model,
                 normalization=False,
                 num_mlp_layer=2,
-                metric=("micro_auroc", "mcc")
+                metric=METRICS_USING
             )
         
         optimizer = torch.optim.Adam(self.model.parameters(), lr=1e-3)
