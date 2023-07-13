@@ -31,7 +31,7 @@ class NodePropertyPrediction(tasks.Task, core.Configurable):
         self.verbose = verbose
         self.graph_construction_model = graph_construction_model
         self.threshold = threshold
-        self.bce_weight = torch.Tensor([bce_weight])
+        self.bce_weight = bce_weight
 
     def preprocess(self, train_set, valid_set, test_set):
         """

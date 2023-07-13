@@ -57,7 +57,7 @@ class Pipeline:
     possible_datasets = ['atpbind', 'atpbind3d', 'atpbind3d-minimal']
     threshold = 0
     
-    def __init__(self, model, dataset, gpus, model_kwargs={}, task_kwargs={}, batch_size=1):
+    def __init__(self, model, dataset, gpus, model_kwargs={}, batch_size=1, bce_weight=1):
         self.gpus = gpus
 
         if model not in self.possible_models:
@@ -84,7 +84,7 @@ class Pipeline:
                 normalization=False,
                 num_mlp_layer=2,
                 metric=METRICS_USING,
-                **task_kwargs
+                bce_weight=torch.tensor([bce_weight], device=torch.device(f'cuda:{self.gpus[0]}')),
             )
         elif dataset == 'atpbind3d' or dataset == 'atpbind3d-minimal':
             graph_construction_model = layers.GraphConstruction(
@@ -99,7 +99,8 @@ class Pipeline:
                 graph_construction_model=graph_construction_model,
                 normalization=False,
                 num_mlp_layer=2,
-                metric=METRICS_USING
+                metric=METRICS_USING,
+                bce_weight=torch.tensor([bce_weight], device=torch.device(f'cuda:{self.gpus[0]}')),
             )
         
         optimizer = torch.optim.Adam(self.model.parameters(), lr=1e-3)

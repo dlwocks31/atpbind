@@ -24,9 +24,7 @@ def run_exp_pure(gearnet_freeze_layer, bert_freeze_layer, pretrained_layers, bce
             'bert_freeze': bert_freeze_layer == 30,
             'bert_freeze_layer_count': bert_freeze_layer,
         },
-        task_kwargs={
-            'bce_weight': bce_weight,
-        }
+        bce_weight=1.0,
     )
         
     state_dict = torch.load(PRETRAINED_WEIGHT[pretrained_layers])
