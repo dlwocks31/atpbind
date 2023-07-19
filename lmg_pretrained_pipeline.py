@@ -24,10 +24,10 @@ def run_exp_pure(gearnet_freeze_layer, bert_freeze_layer, pretrained_layers, bce
             'bert_freeze': bert_freeze_layer == 30,
             'bert_freeze_layer_count': bert_freeze_layer,
         },
-        bce_weight=1.0,
+        bce_weight=bce_weight,
     )
         
-    state_dict = torch.load(PRETRAINED_WEIGHT[pretrained_layers])
+    state_dict = torch.load(PRETRAINED_WEIGHT[pretrained_layers], map_location=f'cuda:{GPU}')
     pipeline.model.gearnet.load_state_dict(state_dict)
     pipeline.model.freeze_gearnet(freeze_layer_count=gearnet_freeze_layer)
 
@@ -66,20 +66,22 @@ def main():
         # File does not exist, or it is empty
         data = []
 
-    for gearnet_freeze_layer in range(1, 2):
-        for bert_freeze_layer in range(29, 30):
-            for pretrained_layers in [4]:
-                for bce_weight in [4, 2, 1, 0.5, 0.25]:
-                    parameters = {
-                        "gearnet_freeze_layer": gearnet_freeze_layer,
-                        "bert_freeze_layer": bert_freeze_layer,
-                        "pretrained_layers": pretrained_layers,
-                        "bce_weight": bce_weight,
-                    }
-                    result = run_exp_pure(**parameters)
-                    append_to_data(data, parameters, result)
-                    with open(DATA_FILE_PATH, 'w') as f:
-                        json.dump(data, f, indent=2)
+    for trial in range(5):
+        gearnet_freeze_layer = 1
+        bert_freeze_layer = 29
+        pretrained_layers = 4
+        for bce_weight in [4, 2, 1, 0.5, 0.25]:
+            parameters = {
+                "gearnet_freeze_layer": gearnet_freeze_layer,
+                "bert_freeze_layer": bert_freeze_layer,
+                "pretrained_layers": pretrained_layers,
+                "bce_weight": bce_weight,
+            }
+            print(parameters)
+            result = run_exp_pure(**parameters)
+            append_to_data(data, parameters, result)
+            with open(DATA_FILE_PATH, 'w') as f:
+                json.dump(data, f, indent=2)
 
 
 if __name__ == '__main__':
