@@ -70,15 +70,19 @@ class LMGearNetModel(torch.nn.Module, core.Configurable):
         # print("at forward, graph: ", graph)
         # print("sequence: ", graph.to_sequence())
         input = [separate_alphabets(seq) for seq in graph.to_sequence()]
+        input_len = [len(seq.replace(' ', '')) for seq in input]
 
+        # At large batch size, tokenization becomes the bottleneck
         encoded_input = self.bert_tokenizer(
-            input, return_tensors='pt', padding=True).to(f'cuda:{self.gpu}')
-        # print("Input size: ", encoded_input["input_ids"].size())
-        x = self.bert_model(**encoded_input)
-        # print("Output size just after bert model: ", x.last_hidden_state.size())
-
-        # skip residue feature for [CLS] and [SEP], since they are not in the original sequence
-        lm_output = x.last_hidden_state.squeeze()[1:-1]
+            input, return_tensors='pt', padding=True).to('cuda')
+        embedding_rpr = self.bert_model(**encoded_input)
+        
+        lm_residue_feature = []
+        for i, emb in enumerate(embedding_rpr.last_hidden_state):
+            # skip residue feature for [CLS] and [SEP], since they are not in the original sequence
+            lm_residue_feature.append(emb[1:1+input_len[i]])
+        
+        lm_output = torch.cat(lm_residue_feature)
 
         # print(f'lm_output shape: {lm_output.shape}')
         gearnet_output = self.gearnet(graph, lm_output)

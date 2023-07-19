@@ -53,7 +53,7 @@ class BertWrapModel(torch.nn.Module, core.Configurable):
 
         # At large batch size, tokenization becomes the bottleneck
         encoded_input = self.bert_tokenizer(
-            input, return_tensors='pt').to('cuda')
+            input, return_tensors='pt', padding=True).to('cuda')
         embedding_rpr = self.bert_model(**encoded_input)
         
         residue_feature = []
