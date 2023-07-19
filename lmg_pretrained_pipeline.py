@@ -3,7 +3,6 @@ from lib.pipeline import Pipeline
 from lib.disable_logger import DisableLogger
 import torch
 
-DATA_FILE_PATH = 'lmg_pretrained_pipeline_v2.json'
 PRETRAINED_WEIGHT = {
     3: 'ResidueType_lmg_3_512_0.54631.pth',
     4: 'ResidueType_lmg_4_512_0.57268.pth',
@@ -11,13 +10,12 @@ PRETRAINED_WEIGHT = {
 }
 GPU = 0
 
-
 def dict_tensor_to_num(d):
     return {k: v.item() if isinstance(v, torch.Tensor) else v
              for k, v in d.items()}
 
 # run experiment without storing data
-def run_exp_pure(gearnet_freeze_layer, bert_freeze_layer, pretrained_layers, bce_weight=1.0):
+def run_exp_pure(bert_freeze_layer, pretrained_layers, bce_weight=1.0, gearnet_freeze_layer=0, reg_weight=0):
     pipeline = Pipeline(
         model='lm-gearnet',
         dataset='atpbind3d',
@@ -29,6 +27,9 @@ def run_exp_pure(gearnet_freeze_layer, bert_freeze_layer, pretrained_layers, bce
             'bert_freeze': bert_freeze_layer == 30,
             'bert_freeze_layer_count': bert_freeze_layer,
         },
+        optimizer_kwargs={
+            'weight_decay': reg_weight,
+        },
         bce_weight=bce_weight,
     )
         
@@ -36,15 +37,7 @@ def run_exp_pure(gearnet_freeze_layer, bert_freeze_layer, pretrained_layers, bce
     pipeline.model.gearnet.load_state_dict(state_dict)
     pipeline.model.freeze_gearnet(freeze_layer_count=gearnet_freeze_layer)
 
-    train_record = []
-    for epoch in range(5):
-        with DisableLogger():
-            pipeline.train(num_epoch=1)
-            train_record.append({
-                "epoch": epoch,
-                "data": dict_tensor_to_num(pipeline.evaluate())
-            })
-        print(train_record[-1])
+    train_record = pipeline.train_until_fit()
     return train_record
 
 
@@ -69,14 +62,7 @@ def add_to_data(file_data, parameters, trial):
     return result
 
 
-def main():
-    try:
-        with open(DATA_FILE_PATH, 'r') as f:
-            data = json.load(f)
-    except (FileNotFoundError, IndexError):
-        # File does not exist, or it is empty
-        data = []
-
+def main_bce_weight(data):
     for trial in range(5):
         gearnet_freeze_layer = 1
         bert_freeze_layer = 29
@@ -94,6 +80,30 @@ def main():
             with open(DATA_FILE_PATH, 'w') as f:
                 json.dump(data, f, indent=2)
 
+def main_l2_reg(data, file_path):
+    for trial in range(5):
+        bert_freeze_layer = 29
+        pretrained_layers = 4
+        reg_weights = [0, 2e-5, 5e-5, 1e-4, 2e-4]
+        for weight in reg_weights:
+            parameters = {
+                "gearnet_freeze_layer": 0,
+                "bert_freeze_layer": bert_freeze_layer,
+                "pretrained_layers": pretrained_layers,
+                "reg_weight": weight,
+            }
+            print(parameters)
+            result = run_exp_pure(**parameters)
+            data = add_to_data(data, parameters, result)
+            with open(file_path, 'w') as f:
+                json.dump(data, f, indent=2)
 
 if __name__ == '__main__':
-    main()
+    DATA_FILE_PATH = 'lmg_pretrained_pipeline_reg.json'
+    try:
+        with open(DATA_FILE_PATH, 'r') as f:
+            data = json.load(f)
+    except (FileNotFoundError, IndexError):
+        # File does not exist, or it is empty
+        data = []
+    main_l2_reg(data, DATA_FILE_PATH)

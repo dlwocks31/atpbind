@@ -1,0 +1,266 @@
+[
+  {
+    "parameters": {
+      "gearnet_freeze_layer": 0,
+      "bert_freeze_layer": 29,
+      "pretrained_layers": 4,
+      "reg_weight": 0
+    },
+    "trials": [
+      [
+        {
+          "micro_auroc": 0.8875227570533752,
+          "mcc": 0.4532690641453111,
+          "accuracy": 0.9458119869232178,
+          "precision": 0.4773083031177521,
+          "sensitivity": 0.4864433705806732,
+          "specificity": 0.9709033966064453,
+          "train_bce": 0.15974178782854925,
+          "valid_bce": 0.11550904156231298
+        },
+        {
+          "micro_auroc": 0.9213504791259766,
+          "mcc": 0.5104493782495465,
+          "accuracy": 0.9524202942848206,
+          "precision": 0.5415986776351929,
+          "sensitivity": 0.5295056104660034,
+          "specificity": 0.9755204916000366,
+          "train_bce": 0.10796263362405385,
+          "valid_bce": 0.11334474224642646
+        },
+        {
+          "micro_auroc": 0.9256167411804199,
+          "mcc": 0.5672047275118549,
+          "accuracy": 0.9558070302009583,
+          "precision": 0.5678465962409973,
+          "sensitivity": 0.6140350699424744,
+          "specificity": 0.9744751453399658,
+          "train_bce": 0.06878116426613591,
+          "valid_bce": 0.10688865296372281
+        },
+        {
+          "micro_auroc": 0.9269888997077942,
+          "mcc": 0.5399383011893849,
+          "accuracy": 0.9576243162155151,
+          "precision": 0.605555534362793,
+          "sensitivity": 0.5215311050415039,
+          "specificity": 0.9814443588256836,
+          "train_bce": 0.040645593031826334,
+          "valid_bce": 0.1368238332897152
+        }
+      ],
+      [
+        {
+          "micro_auroc": 0.8989809155464172,
+          "mcc": 0.4511295587178909,
+          "accuracy": 0.9480422735214233,
+          "precision": 0.4982698857784271,
+          "sensitivity": 0.45933014154434204,
+          "specificity": 0.9747364521026611,
+          "train_bce": 0.15944523011950515,
+          "valid_bce": 0.11343175445388003
+        },
+        {
+          "micro_auroc": 0.9245796799659729,
+          "mcc": 0.5498999412744506,
+          "accuracy": 0.9589459896087646,
+          "precision": 0.6235741376876831,
+          "sensitivity": 0.5231260061264038,
+          "specificity": 0.9827511310577393,
+          "train_bce": 0.1058320086338842,
+          "valid_bce": 0.11631787473761063
+        }
+      ]
+    ]
+  },
+  {
+    "parameters": {
+      "gearnet_freeze_layer": 0,
+      "bert_freeze_layer": 29,
+      "pretrained_layers": 4,
+      "reg_weight": 0.0001
+    },
+    "trials": [
+      [
+        {
+          "micro_auroc": 0.868767499923706,
+          "mcc": 0.3947655084989433,
+          "accuracy": 0.9419296383857727,
+          "precision": 0.43624159693717957,
+          "sensitivity": 0.4146730601787567,
+          "specificity": 0.9707291722297668,
+          "train_bce": 0.1622492307216725,
+          "valid_bce": 0.12106385418191189
+        },
+        {
+          "micro_auroc": 0.9141505360603333,
+          "mcc": 0.47889100121094225,
+          "accuracy": 0.9434164762496948,
+          "precision": 0.4618421196937561,
+          "sensitivity": 0.559808611869812,
+          "specificity": 0.9643697142601013,
+          "train_bce": 0.12865033765663378,
+          "valid_bce": 0.1183986941397917
+        },
+        {
+          "micro_auroc": 0.8798941373825073,
+          "mcc": 0.44494735288547205,
+          "accuracy": 0.9309433102607727,
+          "precision": 0.3898840844631195,
+          "sensitivity": 0.5901116132736206,
+          "specificity": 0.9495600461959839,
+          "train_bce": 0.11371549600818213,
+          "valid_bce": 0.12276106753681855
+        }
+      ]
+    ]
+  },
+  {
+    "parameters": {
+      "gearnet_freeze_layer": 0,
+      "bert_freeze_layer": 29,
+      "pretrained_layers": 4,
+      "reg_weight": 0.0002
+    },
+    "trials": [
+      [
+        {
+          "micro_auroc": 0.861017107963562,
+          "mcc": 0.3590949634965287,
+          "accuracy": 0.9534115195274353,
+          "precision": 0.649289071559906,
+          "sensitivity": 0.2185007929801941,
+          "specificity": 0.9935534596443176,
+          "train_bce": 0.16461077374502883,
+          "valid_bce": 0.12300906934570975
+        },
+        {
+          "micro_auroc": 0.8730533719062805,
+          "mcc": 0.40706328439960743,
+          "accuracy": 0.9344126582145691,
+          "precision": 0.39390090107917786,
+          "sensitivity": 0.49441787600517273,
+          "specificity": 0.9584458470344543,
+          "train_bce": 0.13600207352043525,
+          "valid_bce": 0.13204201605744523
+        }
+      ]
+    ]
+  },
+  {
+    "parameters": {
+      "gearnet_freeze_layer": 0,
+      "bert_freeze_layer": 29,
+      "pretrained_layers": 4,
+      "reg_weight": 0.0004
+    },
+    "trials": [
+      [
+        {
+          "micro_auroc": 0.8756192326545715,
+          "mcc": 0.36718560254482574,
+          "accuracy": 0.9487857222557068,
+          "precision": 0.5094339847564697,
+          "sensitivity": 0.3014354109764099,
+          "specificity": 0.9841449856758118,
+          "train_bce": 0.16481765922302663,
+          "valid_bce": 0.140138232671633
+        },
+        {
+          "micro_auroc": 0.8600015044212341,
+          "mcc": 0.37387481803752093,
+          "accuracy": 0.9392862915992737,
+          "precision": 0.41147541999816895,
+          "sensitivity": 0.40031898021698,
+          "specificity": 0.9687255024909973,
+          "train_bce": 0.14003260985282126,
+          "valid_bce": 0.13253849172374096
+        },
+        {
+          "micro_auroc": 0.8633039593696594,
+          "mcc": 0.39670880057412117,
+          "accuracy": 0.9276391863822937,
+          "precision": 0.36182019114494324,
+          "sensitivity": 0.519936203956604,
+          "specificity": 0.9499085545539856,
+          "train_bce": 0.12716244989646824,
+          "valid_bce": 0.12247116254960619
+        },
+        {
+          "micro_auroc": 0.843987762928009,
+          "mcc": 0.29582685707521705,
+          "accuracy": 0.8912109732627869,
+          "precision": 0.23903177678585052,
+          "sensitivity": 0.5039872527122498,
+          "specificity": 0.9123616814613342,
+          "train_bce": 0.11945342077135775,
+          "valid_bce": 0.1327885736416026
+        }
+      ]
+    ]
+  },
+  {
+    "parameters": {
+      "gearnet_freeze_layer": 0,
+      "bert_freeze_layer": 29,
+      "pretrained_layers": 4,
+      "reg_weight": 2e-05
+    },
+    "trials": [
+      [
+        {
+          "micro_auroc": 0.8988869786262512,
+          "mcc": 0.4361639583470274,
+          "accuracy": 0.9474640488624573,
+          "precision": 0.49192100763320923,
+          "sensitivity": 0.4370015859603882,
+          "specificity": 0.9753462672233582,
+          "train_bce": 0.16166332854063026,
+          "valid_bce": 0.11491872565593661
+        },
+        {
+          "micro_auroc": 0.910926878452301,
+          "mcc": 0.5219019750363644,
+          "accuracy": 0.9552288055419922,
+          "precision": 0.5754884481430054,
+          "sensitivity": 0.5167464017868042,
+          "specificity": 0.9791793823242188,
+          "train_bce": 0.1182380656239187,
+          "valid_bce": 0.11747471865681114
+        }
+      ]
+    ]
+  },
+  {
+    "parameters": {
+      "gearnet_freeze_layer": 0,
+      "bert_freeze_layer": 29,
+      "pretrained_layers": 4,
+      "reg_weight": 5e-05
+    },
+    "trials": [
+      [
+        {
+          "micro_auroc": 0.8867258429527283,
+          "mcc": 0.4465574090636022,
+          "accuracy": 0.9568808674812317,
+          "precision": 0.6779661178588867,
+          "sensitivity": 0.31897926330566406,
+          "specificity": 0.9917240142822266,
+          "train_bce": 0.16129892301477647,
+          "valid_bce": 0.11198204805756487
+        },
+        {
+          "micro_auroc": 0.8887242078781128,
+          "mcc": 0.448533837233721,
+          "accuracy": 0.9490335583686829,
+          "precision": 0.5091575384140015,
+          "sensitivity": 0.4433811902999878,
+          "specificity": 0.9766530394554138,
+          "train_bce": 0.1251652990067129,
+          "valid_bce": 0.12297775578243579
+        }
+      ]
+    ]
+  }
+]

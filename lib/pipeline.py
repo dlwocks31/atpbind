@@ -59,7 +59,15 @@ class Pipeline:
     possible_datasets = ['atpbind', 'atpbind3d', 'atpbind3d-minimal']
     threshold = 0
     
-    def __init__(self, model, dataset, gpus, model_kwargs={}, batch_size=1, bce_weight=1, verbose=False):
+    def __init__(self, 
+                 model,
+                 dataset,
+                 gpus,
+                 model_kwargs={},
+                 optimizer_kwargs={},
+                 batch_size=1,
+                 bce_weight=1,
+                 verbose=False):
         self.gpus = gpus
 
         if model not in self.possible_models:
@@ -105,7 +113,7 @@ class Pipeline:
                 bce_weight=torch.tensor([bce_weight], device=torch.device(f'cuda:{self.gpus[0]}')),
             )
         
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=1e-3)
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=1e-3, **optimizer_kwargs)
         with DisableLogger():
             self.solver = core.Engine(self.task,
                                         self.train_set,
@@ -134,6 +142,7 @@ class Pipeline:
                 cur_result['valid_bce'] = self.calculate_valid_loss()
                 last_result = train_record[-1] if train_record else None
                 train_record.append(cur_result)
+                print(cur_result)
                 if last_result and last_result['valid_bce'] < cur_result['valid_bce']:
                     return train_record
         
@@ -192,11 +201,3 @@ class Pipeline:
         self.task.threshold = threshold
         return {k: v.item() if k == 'micro_auroc' else v 
                 for (k, v) in self.solver.evaluate("test").items()}
-        
-        
-        
-        
-    
-    
-        
-    
