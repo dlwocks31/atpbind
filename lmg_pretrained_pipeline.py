@@ -11,6 +11,11 @@ PRETRAINED_WEIGHT = {
 }
 GPU = 0
 
+
+def dict_tensor_to_num(d):
+    return {k: v.item() if isinstance(v, torch.Tensor) else v
+             for k, v in d.items()}
+
 # run experiment without storing data
 def run_exp_pure(gearnet_freeze_layer, bert_freeze_layer, pretrained_layers, bce_weight=1.0):
     pipeline = Pipeline(
@@ -37,7 +42,7 @@ def run_exp_pure(gearnet_freeze_layer, bert_freeze_layer, pretrained_layers, bce
             pipeline.train(num_epoch=1)
             train_record.append({
                 "epoch": epoch,
-                "data": pipeline.evaluate()
+                "data": dict_tensor_to_num(pipeline.evaluate())
             })
         print(train_record[-1])
     return train_record
