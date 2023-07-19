@@ -178,3 +178,4 @@ data/weight/**
 .vscode
 
 _playground/
+*.pth
