@@ -43,7 +43,7 @@ def run_exp_pure(gearnet_freeze_layer, bert_freeze_layer, pretrained_layers, bce
     return train_record
 
 
-def append_to_data(file_data, parameters, trial):
+def add_to_data(file_data, parameters, trial):
     '''
     file_data: list of {parameters: dict, trials: list}
     parameters: dict
@@ -52,10 +52,16 @@ def append_to_data(file_data, parameters, trial):
     This function would find the entry in file_data with the same parameters
     and append the trial to the trials list.
     '''
-    for entry in file_data:
+    result = file_data[::]
+    for entry in result:
         if all(entry['parameters'][k] == v for k, v in parameters.items()):
             entry['trials'].append(trial)
-            return
+            return result
+    result.append({
+        "parameters": parameters,
+        "trials": [trial]
+    })
+    return result
 
 
 def main():
@@ -79,7 +85,7 @@ def main():
             }
             print(parameters)
             result = run_exp_pure(**parameters)
-            append_to_data(data, parameters, result)
+            data = add_to_data(data, parameters, result)
             with open(DATA_FILE_PATH, 'w') as f:
                 json.dump(data, f, indent=2)
 
