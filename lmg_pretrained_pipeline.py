@@ -63,7 +63,9 @@ def add_to_data(file_data, parameters, trial):
     return result
 
 
-def main_bce_weight(data, file_path):
+def main_bce_weight():
+    FILE_PATH = 'lmg_pretrained_pipeline_v2.json'
+    data = read_initial_data(FILE_PATH)
     for trial in range(3):
         gearnet_freeze_layer = 1
         bert_freeze_layer = 29
@@ -78,7 +80,7 @@ def main_bce_weight(data, file_path):
             print(parameters)
             result = run_exp_pure(**parameters)
             data = add_to_data(data, parameters, result)
-            with open(file_path, 'w') as f:
+            with open(FILE_PATH, 'w') as f:
                 json.dump(data, f, indent=2)
 
 def main_l2_reg(data, file_path):
@@ -127,4 +129,4 @@ def read_initial_data(path):
     return data
 
 if __name__ == '__main__':
-    main_lmg_29_4()
+    main_bce_weight()
