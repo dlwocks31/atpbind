@@ -53,7 +53,7 @@ def get_dataset(dataset):
         
         return train_set, valid_set, test_set
 
-METRICS_USING = ("micro_auroc", "mcc", "accuracy", "precision", "sensitivity", "specificity")
+METRICS_USING = ("sensitivity", "specificity", "accuracy", "precision", "mcc", "micro_auroc",)
 class Pipeline:
     possible_models = ['bert', 'gearnet', 'lm-gearnet', 'cnn']
     possible_datasets = ['atpbind', 'atpbind3d', 'atpbind3d-minimal']

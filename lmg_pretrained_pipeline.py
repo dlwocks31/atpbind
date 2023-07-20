@@ -6,7 +6,8 @@ import torch
 PRETRAINED_WEIGHT = {
     3: 'ResidueType_lmg_3_512_0.54631.pth',
     4: 'ResidueType_lmg_4_512_0.57268.pth',
-    6: 'ResidueType_lmg_6_512_0.55843.pth',   
+    6: 'ResidueType_lmg_6_512_0.55843.pth',
+    '29_4': 'lmg_29_4_512_0.58736.pth',
 }
 GPU = 0
 
@@ -19,7 +20,7 @@ def run_exp_pure(bert_freeze_layer, pretrained_layers, bce_weight=1.0, gearnet_f
         model_kwargs={
             'gpu': GPU,
             'gearnet_hidden_dim_size': 512,
-            'gearnet_hidden_dim_count': pretrained_layers,
+            'gearnet_hidden_dim_count': pretrained_layers if isinstance(pretrained_layers, int) else int(pretrained_layers.split('_')[1]),
             'bert_freeze': bert_freeze_layer == 30,
             'bert_freeze_layer_count': bert_freeze_layer,
         },
@@ -27,11 +28,15 @@ def run_exp_pure(bert_freeze_layer, pretrained_layers, bce_weight=1.0, gearnet_f
             'weight_decay': reg_weight,
         },
         bce_weight=bce_weight,
+        batch_size=8,
     )
         
     state_dict = torch.load(PRETRAINED_WEIGHT[pretrained_layers], map_location=f'cuda:{GPU}')
-    pipeline.model.gearnet.load_state_dict(state_dict)
-    pipeline.model.freeze_gearnet(freeze_layer_count=gearnet_freeze_layer)
+    if isinstance(pretrained_layers, str): # LM is also pretrained
+        pipeline.model.load_state_dict(state_dict)
+    else:
+        pipeline.model.gearnet.load_state_dict(state_dict)
+        pipeline.model.freeze_gearnet(freeze_layer_count=gearnet_freeze_layer)
 
     train_record = pipeline.train_until_fit(patience=3)
     return train_record
@@ -94,12 +99,32 @@ def main_l2_reg(data, file_path):
             with open(file_path, 'w') as f:
                 json.dump(data, f, indent=2)
 
-if __name__ == '__main__':
-    DATA_FILE_PATH = 'lmg_pretrained_pipeline_v2.json'
+def main_lmg_29_4():
+    FILE_PATH = 'lmg_pretrained_pipeline_29_4.json'
+    data = read_initial_data(FILE_PATH)
+    for trial in range(5):
+        bert_freeze_layer = 29
+        pretrained_layers = 4
+        parameters = {
+            "gearnet_freeze_layer": 0,
+            "bert_freeze_layer": bert_freeze_layer,
+            "pretrained_layers": pretrained_layers,
+            "bce_weight": 2,
+        }
+        print(parameters)
+        result = run_exp_pure(**parameters)
+        data = add_to_data(data, parameters, result)
+        with open(FILE_PATH, 'w') as f:
+            json.dump(data, f, indent=2)
+
+def read_initial_data(path):
     try:
-        with open(DATA_FILE_PATH, 'r') as f:
+        with open(path, 'r') as f:
             data = json.load(f)
     except (FileNotFoundError, IndexError):
         # File does not exist, or it is empty
         data = []
-    main_bce_weight(data, DATA_FILE_PATH)
+    return data
+
+if __name__ == '__main__':
+    main_lmg_29_4()
