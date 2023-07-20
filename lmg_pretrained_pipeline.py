@@ -10,10 +10,6 @@ PRETRAINED_WEIGHT = {
 }
 GPU = 0
 
-def dict_tensor_to_num(d):
-    return {k: v.item() if isinstance(v, torch.Tensor) else v
-             for k, v in d.items()}
-
 # run experiment without storing data
 def run_exp_pure(bert_freeze_layer, pretrained_layers, bce_weight=1.0, gearnet_freeze_layer=0, reg_weight=0):
     pipeline = Pipeline(
@@ -37,7 +33,7 @@ def run_exp_pure(bert_freeze_layer, pretrained_layers, bce_weight=1.0, gearnet_f
     pipeline.model.gearnet.load_state_dict(state_dict)
     pipeline.model.freeze_gearnet(freeze_layer_count=gearnet_freeze_layer)
 
-    train_record = pipeline.train_until_fit()
+    train_record = pipeline.train_until_fit(patience=3)
     return train_record
 
 
@@ -62,8 +58,8 @@ def add_to_data(file_data, parameters, trial):
     return result
 
 
-def main_bce_weight(data):
-    for trial in range(5):
+def main_bce_weight(data, file_path):
+    for trial in range(3):
         gearnet_freeze_layer = 1
         bert_freeze_layer = 29
         pretrained_layers = 4
@@ -77,7 +73,7 @@ def main_bce_weight(data):
             print(parameters)
             result = run_exp_pure(**parameters)
             data = add_to_data(data, parameters, result)
-            with open(DATA_FILE_PATH, 'w') as f:
+            with open(file_path, 'w') as f:
                 json.dump(data, f, indent=2)
 
 def main_l2_reg(data, file_path):
@@ -99,11 +95,11 @@ def main_l2_reg(data, file_path):
                 json.dump(data, f, indent=2)
 
 if __name__ == '__main__':
-    DATA_FILE_PATH = 'lmg_pretrained_pipeline_reg.json'
+    DATA_FILE_PATH = 'lmg_pretrained_pipeline_v2.json'
     try:
         with open(DATA_FILE_PATH, 'r') as f:
             data = json.load(f)
     except (FileNotFoundError, IndexError):
         # File does not exist, or it is empty
         data = []
-    main_l2_reg(data, DATA_FILE_PATH)
+    main_bce_weight(data, DATA_FILE_PATH)
