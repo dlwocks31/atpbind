@@ -130,7 +130,7 @@ class Pipeline:
     def train(self, num_epoch):
         return self.solver.train(num_epoch=num_epoch)
     
-    def train_until_fit(self, break_after_epoch=1):
+    def train_until_fit(self, patience=1):
         from itertools import count
         train_record = []
         for epoch in count(start=1):
@@ -139,13 +139,15 @@ class Pipeline:
                 self.train(num_epoch=1)
                 cur_result = dict_tensor_to_num(self.evaluate())
                 cur_result['train_bce'] = self.get_last_bce()
-                cur_result['valid_bce'] = self.calculate_valid_loss()
-                self.evaluate()
+                cur_result['valid_mcc'] = self.calculate_best_mcc_and_threshold(
+                    threshold_set='valid'
+                )['best_mcc']
                 train_record.append(cur_result)
                 print(cur_result)
-                min_bce_index = np.argmin([record['valid_bce'] for record in train_record])
-                if min_bce_index < len(train_record) - break_after_epoch:
+                max_mcc_index = np.argmax([record['valid_mcc'] for record in train_record])
+                if max_mcc_index < len(train_record) - patience:
                     break
+        return train_record
         
 
     def get_last_bce(self):
