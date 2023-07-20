@@ -130,7 +130,7 @@ class Pipeline:
     def train(self, num_epoch):
         return self.solver.train(num_epoch=num_epoch)
     
-    def train_until_fit(self):
+    def train_until_fit(self, break_after_epoch=1):
         from itertools import count
         train_record = []
         for epoch in count(start=1):
@@ -140,11 +140,12 @@ class Pipeline:
                 cur_result = dict_tensor_to_num(self.evaluate())
                 cur_result['train_bce'] = self.get_last_bce()
                 cur_result['valid_bce'] = self.calculate_valid_loss()
-                last_result = train_record[-1] if train_record else None
+                self.evaluate()
                 train_record.append(cur_result)
                 print(cur_result)
-                if last_result and last_result['valid_bce'] < cur_result['valid_bce']:
-                    return train_record
+                min_bce_index = np.argmin([record['valid_bce'] for record in train_record])
+                if min_bce_index < len(train_record) - break_after_epoch:
+                    break
         
 
     def get_last_bce(self):
@@ -170,16 +171,18 @@ class Pipeline:
         
         return mean(metrics)
 
-    def evaluate(self, threshold_set='valid'):
+
+    def calculate_best_mcc_and_threshold(self, threshold_set='valid'):
+        dataloader = data.DataLoader(
+            self.valid_set if threshold_set == 'valid' else self.test_set,
+            batch_size=1,
+            shuffle=False
+        )
+
         preds = []
         targets = []
         thresholds = np.linspace(-3, 1, num=400)
         mcc_values = [0 for i in range(len(thresholds))]
-
-        if threshold_set == 'valid':
-            dataloader = data.DataLoader(self.valid_set, batch_size=1, shuffle=False)
-        elif threshold_set == 'test':
-            dataloader = data.DataLoader(self.test_set, batch_size=1, shuffle=False)
 
         with torch.no_grad():
             for batch in dataloader:
@@ -187,16 +190,26 @@ class Pipeline:
                 pred, target = self.task.predict_and_target(batch)
                 preds.append(pred)
                 targets.append(target)
-
+        
         pred = utils.cat(preds)
         target = utils.cat(targets)
-        
+
         for i, threshold in enumerate(thresholds):
             mcc = self.task.evaluate(
                 pred, target, threshold
             )['mcc']
             mcc_values[i] = mcc_values[i] + mcc
-        threshold = thresholds[np.argmax(mcc_values)]
+
+        max_mcc_idx = np.argmax(mcc_values)
+        
+        return {
+            'best_mcc': mcc_values[max_mcc_idx],
+            'best_threshold': thresholds[max_mcc_idx]
+        }
+
+
+    def evaluate(self, threshold_set='valid'):
+        threshold = self.calculate_best_mcc_and_threshold(threshold_set)['best_threshold']
         # print(f'threshold: {threshold}\n')
         self.task.threshold = threshold
         return {k: v.item() if k == 'micro_auroc' else v 
