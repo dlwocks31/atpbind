@@ -18,6 +18,8 @@ def parse_args():
                         help="Path to the pretrained weight file")
     parser.add_argument("--gpu", type=int, default=0,
                         help="GPU to use")
+    parser.add_argument("--bert_freeze_layer_count", type=int, default=30,
+                        help="Number of layers to freeze in BERT")
     parser.add_argument("--hidden_dim_count", type=int, default=6,
                         help="Number of hidden dimensions")
     parser.add_argument("--hidden_dim_size", type=int, default=512,
@@ -58,7 +60,9 @@ def main():
 
     lm_gearnet = LMGearNetModel(args.gpu,
                                 gearnet_hidden_dim_size=args.hidden_dim_size, 
-                                gearnet_hidden_dim_count=args.hidden_dim_count
+                                gearnet_hidden_dim_count=args.hidden_dim_count,
+                                bert_freeze=args.bert_freeze_layer_count==30,
+                                bert_freeze_layer_count=args.bert_freeze_layer_count,
                                 )
 
     task = tasks.AttributeMasking(lm_gearnet, graph_construction_model=graph_construction_model,
@@ -72,7 +76,8 @@ def main():
 
     if args.pretrained is not None:
         # Load pretrained model
-        solver.load(args.pretrained)
+        state_dict = torch.load(args.pretrained, map_location=f'cuda:{args.gpu}')
+        lm_gearnet.load_state_dict(state_dict)
 
     while True:
         try:
@@ -103,11 +108,28 @@ def validate_and_save(solver, lm_gearnet, args):
                 f"RuntimeError occurred: fail_cnt = {fail_cnt}. Continue validating")
             sleep(60)
 
-    torch.save(lm_gearnet.gearnet.state_dict(), "ResidueType_lmg_%d_%d_%.5f.pth" %
-                (args.hidden_dim_count,
-                 args.hidden_dim_size,
-                 result['accuracy'].item()))
+    name_prefix = f"lmg_{args.bert_freeze_layer_count}_{args.hidden_dim_count}_{args.hidden_dim_size}"
+    files, accuracy = parse_current_saved_weight(name_prefix)
+    if accuracy < result['accuracy'].item():
+        print(f"Saving weight with accuracy {result['accuracy']:.5f}")
+        torch.save(lm_gearnet.state_dict(), f"{name_prefix}_{result['accuracy']:.5f}.pth")
+        for file in files:
+            os.remove(file)
 
+def find_files_with_prefix(prefix):
+    current_dir = os.getcwd()
+    files_with_prefix = []
+    for filename in os.listdir(current_dir):
+        if filename.startswith(prefix):
+            files_with_prefix.append(filename)
+    return files_with_prefix
+
+def parse_current_saved_weight(prefix):
+    # take all files with prefix
+    files = find_files_with_prefix(prefix)
+    accuracies = [float(i.replace('.pth', '').split('_')[-1]) for i in files]
+    print(accuracies)
+    return files, (max(accuracies) if len(accuracies) > 0 else 0)
 
 if __name__ == "__main__":
     main()
