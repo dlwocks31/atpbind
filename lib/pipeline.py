@@ -137,7 +137,7 @@ class Pipeline:
             cm = contextlib.nullcontext() if self.verbose else DisableLogger()
             with cm:
                 self.train(num_epoch=1)
-                cur_result = dict_tensor_to_num(self.evaluate())
+                cur_result = self.evaluate()
                 cur_result['train_bce'] = self.get_last_bce()
                 cur_result['valid_mcc'] = self.calculate_best_mcc_and_threshold(
                     threshold_set='valid'
@@ -214,5 +214,4 @@ class Pipeline:
         threshold = self.calculate_best_mcc_and_threshold(threshold_set)['best_threshold']
         # print(f'threshold: {threshold}\n')
         self.task.threshold = threshold
-        return {k: v.item() if k == 'micro_auroc' else v 
-                for (k, v) in self.solver.evaluate("test").items()}
+        return dict_tensor_to_num(self.solver.evaluate("test"))
