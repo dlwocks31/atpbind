@@ -65,6 +65,9 @@ class Pipeline:
                  gpus,
                  model_kwargs={},
                  optimizer_kwargs={},
+                 graph_knn_k=10,
+                 graph_spatial_radius=10.0,
+                 graph_sequential_max_distance=2,
                  batch_size=1,
                  bce_weight=1,
                  verbose=False):
@@ -80,9 +83,9 @@ class Pipeline:
             if model == 'bert':
                 self.model = BertWrapModel(**model_kwargs)
             elif model == 'gearnet':
-                self.model = GearNetWrapModel(**model_kwargs)
+                self.model = GearNetWrapModel(graph_sequential_max_distance=graph_sequential_max_distance, **model_kwargs)
             elif model == 'lm-gearnet':
-                self.model = LMGearNetModel(**model_kwargs)
+                self.model = LMGearNetModel(graph_sequential_max_distance=graph_sequential_max_distance, **model_kwargs)
             elif model == 'cnn':
                 self.model = models.ProteinCNN(**model_kwargs)
         
@@ -99,9 +102,9 @@ class Pipeline:
         elif dataset == 'atpbind3d' or dataset == 'atpbind3d-minimal':
             graph_construction_model = layers.GraphConstruction(
                 node_layers=[geometry.AlphaCarbonNode()],
-                edge_layers=[geometry.SpatialEdge(radius=10.0, min_distance=5),
-                             geometry.KNNEdge(k=10, min_distance=5),
-                             geometry.SequentialEdge(max_distance=2)],
+                edge_layers=[geometry.SpatialEdge(radius=graph_spatial_radius, min_distance=5),
+                             geometry.KNNEdge(k=graph_knn_k, min_distance=5),
+                             geometry.SequentialEdge(max_distance=graph_sequential_max_distance)],
                 edge_feature="gearnet"
             )
             self.task = NodePropertyPrediction(

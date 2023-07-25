@@ -43,7 +43,7 @@ def separate_alphabets(text):
 
 
 class LMGearNetModel(torch.nn.Module, core.Configurable):
-    def __init__(self, gpu, gearnet_hidden_dim_size=512, gearnet_hidden_dim_count=6, bert_freeze=True, bert_freeze_layer_count=-1):
+    def __init__(self, gpu, gearnet_hidden_dim_size=512, gearnet_hidden_dim_count=6, bert_freeze=True, bert_freeze_layer_count=-1, graph_sequential_max_distance=3):
         super().__init__()
         self.bert_tokenizer = BertTokenizer.from_pretrained(
             "Rostlab/prot_bert", do_lower_case=False)
@@ -54,8 +54,8 @@ class LMGearNetModel(torch.nn.Module, core.Configurable):
         self.gearnet = models.GearNet(
             input_dim=1024,  # self.bert_model.config.hidden_size,
             hidden_dims=[gearnet_hidden_dim_size] * gearnet_hidden_dim_count,
-            num_relation=7,
-            edge_input_dim=59,
+            num_relation=7 + (graph_sequential_max_distance - 2) * 2,
+            edge_input_dim=59 + (graph_sequential_max_distance - 2) * 2,
             num_angle_bin=8,
             batch_norm=True,
             concat_hidden=True,
@@ -124,12 +124,12 @@ class GearNetWrapModel(torch.nn.Module, core.Configurable):
                 for param in layer.parameters():
                     param.requires_grad = False
 
-    def __init__(self, input_dim, hidden_dims, gpu):
+    def __init__(self, input_dim, hidden_dims, gpu, graph_sequential_max_distance=3):
         super().__init__()
         self.gpu = gpu
         self.model = models.GearNet(
-            num_relation=7,
-            edge_input_dim=59,
+            num_relation=7 + (graph_sequential_max_distance - 2) * 2,
+            edge_input_dim=59 + (graph_sequential_max_distance - 2) * 2,
             num_angle_bin=8,
             batch_norm=True,
             concat_hidden=True,
