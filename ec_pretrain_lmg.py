@@ -26,6 +26,8 @@ def parse_args():
                         help="Size of each hidden dimension")
     parser.add_argument("--batch_size", type=int, default=1,
                         help="Batch size for training")
+    parser.add_argument("--sequential_max_distance", type=int, default=2,
+                        help="Max distance for sequential edge")
     return parser.parse_args()
 
 
@@ -55,7 +57,7 @@ def main():
                                                         edge_layers=[geometry.SpatialEdge(radius=10.0, min_distance=5),
                                                                      geometry.KNNEdge(
                                                                          k=10, min_distance=5),
-                                                                     geometry.SequentialEdge(max_distance=2)],
+                                                                     geometry.SequentialEdge(max_distance=args.sequential_max_distance)],
                                                         edge_feature="gearnet")
 
     lm_gearnet = LMGearNetModel(args.gpu,
@@ -63,6 +65,7 @@ def main():
                                 gearnet_hidden_dim_count=args.hidden_dim_count,
                                 bert_freeze=args.bert_freeze_layer_count==30,
                                 bert_freeze_layer_count=args.bert_freeze_layer_count,
+                                graph_sequential_max_distance=args.sequential_max_distance,
                                 )
 
     task = tasks.AttributeMasking(lm_gearnet, graph_construction_model=graph_construction_model,
@@ -108,7 +111,7 @@ def validate_and_save(solver, lm_gearnet, args):
                 f"RuntimeError occurred: fail_cnt = {fail_cnt}. Continue validating")
             sleep(60)
 
-    name_prefix = f"lmg_{args.bert_freeze_layer_count}_{args.hidden_dim_count}_{args.hidden_dim_size}"
+    name_prefix = f"lmg_{args.bert_freeze_layer_count}_{args.hidden_dim_count}_{args.sequential_max_distance}"
     files, accuracy = parse_current_saved_weight(name_prefix)
     if accuracy < result['accuracy'].item():
         print(f"Saving weight with accuracy {result['accuracy']:.5f}")
@@ -117,10 +120,12 @@ def validate_and_save(solver, lm_gearnet, args):
             os.remove(file)
 
 def find_files_with_prefix(prefix):
+    import re
     current_dir = os.getcwd()
     files_with_prefix = []
     for filename in os.listdir(current_dir):
-        if filename.startswith(prefix):
+        match_obj = re.match(f'{prefix}_(0\.\d*)\.pth', filename)
+        if match_obj:
             files_with_prefix.append(filename)
     return files_with_prefix
 

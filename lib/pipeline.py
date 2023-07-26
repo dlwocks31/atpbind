@@ -100,11 +100,15 @@ class Pipeline:
                 bce_weight=torch.tensor([bce_weight], device=torch.device(f'cuda:{self.gpus[0]}')),
             )
         elif dataset == 'atpbind3d' or dataset == 'atpbind3d-minimal':
+            edge_layers = [
+                geometry.SpatialEdge(radius=graph_spatial_radius, min_distance=5),
+                geometry.KNNEdge(k=graph_knn_k, min_distance=5),
+                geometry.SequentialEdge(max_distance=graph_sequential_max_distance),
+            ]
+                
             graph_construction_model = layers.GraphConstruction(
                 node_layers=[geometry.AlphaCarbonNode()],
-                edge_layers=[geometry.SpatialEdge(radius=graph_spatial_radius, min_distance=5),
-                             geometry.KNNEdge(k=graph_knn_k, min_distance=5),
-                             geometry.SequentialEdge(max_distance=graph_sequential_max_distance)],
+                edge_layers=edge_layers,
                 edge_feature="gearnet"
             )
             self.task = NodePropertyPrediction(

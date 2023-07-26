@@ -23,6 +23,18 @@ def run_exp_pure(layer, knn_k=10, spatial_radius=10.0, sequential_max_distance=2
     train_record = pipeline.train_until_fit(patience=3)
     return train_record
 
+def count_data(file_data, parameters):
+    '''
+    file_data: list of {parameters: dict, trials: list}
+    parameters: dict
+
+    This function would find the entry in file_data with the same parameters
+    and count the number of trials.
+    '''
+    for entry in file_data:
+        if all(entry['parameters'][k] == v for k, v in parameters.items()):
+            return len(entry['trials'])
+    return 0
 
 def add_to_data(file_data, parameters, trial):
     '''
@@ -58,20 +70,23 @@ def main():
     data = read_initial_data(DATA_FILE_PATH)
     layer = 4
     for trial in range(3):
-        for knn_k in [5, 10, 15]:
-            for spatial_radius in [5.0, 10.0, 15.0]:
-                for sequential_max_distance in [4, 5, 6]:
-                        parameters = {
-                            'layer': layer,
-                            'knn_k': knn_k,
-                            'spatial_radius': spatial_radius,
-                            'sequential_max_distance': sequential_max_distance,
-                        }
-                        print(parameters)
-                        train_record = run_exp_pure(layer, knn_k, spatial_radius, sequential_max_distance)
-                        data = add_to_data(data, parameters, train_record)
-                        with open(DATA_FILE_PATH, 'w') as f:
-                            json.dump(data, f, indent=2)
+        for knn_k in [0, 5, 10, 15]:
+            for spatial_radius in [5.0, 10.0]:
+                for sequential_max_distance in range(1, 9):
+                    parameters = {
+                        'layer': layer,
+                        'knn_k': knn_k,
+                        'spatial_radius': spatial_radius,
+                        'sequential_max_distance': sequential_max_distance,
+                    }
+                    if count_data(data, parameters) > trial:
+                        continue
+                    print(parameters)
+
+                    train_record = run_exp_pure(layer, knn_k, spatial_radius, sequential_max_distance)
+                    data = add_to_data(data, parameters, train_record)
+                    with open(DATA_FILE_PATH, 'w') as f:
+                        json.dump(data, f, indent=2)
 
 
 
