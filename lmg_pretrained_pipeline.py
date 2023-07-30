@@ -2,6 +2,7 @@ import json
 from lib.pipeline import Pipeline
 from lib.disable_logger import DisableLogger
 import torch
+import pandas as pd
 
 GPU = 0
 
@@ -126,9 +127,9 @@ def main_lmg_29_4():
             json.dump(data, f, indent=2)
 
 def main_lmg_30_4_6():
-    FILE_PATH = 'lmg_pretrained_pipeline_30_4_6.json'
-    PRETRAINED_WEIGHT_FILE = 'lmg_30_4_6_0.57461_back.pth'
-    data = read_initial_data(FILE_PATH)
+    CSV_PATH = 'lmg_pretrained_pipeline_30_4_6.csv'
+    PRETRAINED_WEIGHT_FILE = 'lmg_30_4_6_0.59149.pth'
+    df = read_initial_csv(CSV_PATH)
     for trial in range(5):
         parameters = {
             "gearnet_freeze_layer": 0,
@@ -143,9 +144,10 @@ def main_lmg_30_4_6():
             pretrained_weight_file=PRETRAINED_WEIGHT_FILE,
             pretrained_weight_has_lm=True
         )
-        data = add_to_data(data, parameters, result)
-        with open(FILE_PATH, 'w') as f:
-            json.dump(data, f, indent=2)
+        
+        new_row = pd.DataFrame.from_dict([{**parameters, **result[-4]}])
+        df = pd.concat([df, new_row])
+        df.to_csv(CSV_PATH, index=False)
 
 def read_initial_data(path):
     try:
@@ -155,6 +157,13 @@ def read_initial_data(path):
         # File does not exist, or it is empty
         data = []
     return data
+
+def read_initial_csv(path):
+    try:
+        return pd.read_csv(path)
+    except (FileNotFoundError, IndexError):
+        # File does not exist, or it is empty
+        return pd.DataFrame()
 
 if __name__ == '__main__':
     import argparse
