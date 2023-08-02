@@ -43,7 +43,7 @@ def separate_alphabets(text):
 
 
 class LMGearNetModel(torch.nn.Module, core.Configurable):
-    def __init__(self, gpu, gearnet_hidden_dim_size=512, gearnet_hidden_dim_count=6, bert_freeze=True, bert_freeze_layer_count=-1, graph_sequential_max_distance=3):
+    def __init__(self, gpu, gearnet_hidden_dim_size=512, gearnet_hidden_dim_count=6, bert_freeze=True, bert_freeze_layer_count=-1, graph_sequential_max_distance=2):
         super().__init__()
         self.bert_tokenizer = BertTokenizer.from_pretrained(
             "Rostlab/prot_bert", do_lower_case=False)

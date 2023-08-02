@@ -101,8 +101,8 @@ def main_edge_type():
     CSV_PATH = 'lmg_pretrained_pipeline_edge_type.csv'
     df = read_initial_csv(CSV_PATH)
     for trial in range(5):
-        for knn_k in [10, 20]:
-            for spatial_radius in [10.0, 20.0]:
+        for knn_k in [10]:
+            for spatial_radius in [0.0]:
                 for sequential_max_distance in range(2, 9):
                     parameters = {
                         'knn_k': knn_k,

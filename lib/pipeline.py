@@ -193,7 +193,7 @@ class Pipeline:
 
         preds = []
         targets = []
-        thresholds = np.linspace(-3, 1, num=400)
+        thresholds = np.linspace(-3, 1, num=41)
         mcc_values = [0 for i in range(len(thresholds))]
 
         with torch.no_grad():
