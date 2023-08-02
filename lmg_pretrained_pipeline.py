@@ -12,9 +12,13 @@ def run_exp_pure(bert_freeze_layer,
                  bce_weight=1.0,
                  gearnet_freeze_layer=0,
                  reg_weight=0,
-                 graph_sequential_max_distance=2,
                  pretrained_weight_file='ResidueType_lmg_4_512_0.57268.pth',
                  pretrained_weight_has_lm=False,
+                 lr=1e-3,
+                 batch_size=4,
+                 knn_k=10,
+                 spatial_radius=10.0,
+                 sequential_max_distance=2,
                  ):
     pipeline = Pipeline(
         model='lm-gearnet',
@@ -29,16 +33,20 @@ def run_exp_pure(bert_freeze_layer,
         },
         optimizer_kwargs={
             'weight_decay': reg_weight,
+            'lr': lr,
         },
         bce_weight=bce_weight,
-        graph_sequential_max_distance=graph_sequential_max_distance,
-        batch_size=4,
+        batch_size=batch_size,
+        graph_knn_k=knn_k,
+        graph_spatial_radius=spatial_radius,
+        graph_sequential_max_distance=sequential_max_distance,
     )
-    state_dict = torch.load(pretrained_weight_file, map_location=f'cuda:{GPU}')
-    if pretrained_weight_has_lm: # LM is also pretrained
-        pipeline.model.load_state_dict(state_dict)
-    else:
-        pipeline.model.gearnet.load_state_dict(state_dict)
+    if pretrained_weight_file is not None:
+        state_dict = torch.load(pretrained_weight_file, map_location=f'cuda:{GPU}')
+        if pretrained_weight_has_lm: # LM is also pretrained
+            pipeline.model.load_state_dict(state_dict)
+        else:
+            pipeline.model.gearnet.load_state_dict(state_dict)
     
     pipeline.model.freeze_gearnet(freeze_layer_count=gearnet_freeze_layer)
 
@@ -68,24 +76,54 @@ def add_to_data(file_data, parameters, trial):
 
 
 def main_bce_weight():
-    FILE_PATH = 'lmg_pretrained_pipeline_v2.json'
-    data = read_initial_data(FILE_PATH)
-    for trial in range(3):
-        gearnet_freeze_layer = 1
-        bert_freeze_layer = 29
-        pretrained_layers = 4
-        for bce_weight in [4, 2, 1, 0.5, 0.25]:
+    CSV_PATH = 'lmg_pretrained_pipeline_main_bce_weight.csv'
+    df = read_initial_csv(CSV_PATH)
+    for trial in range(5):
+        for bce_weight in [0.1, 0.25, 0.5, 1.0, 2.0, 4.0, 10.0, 20.0, 40.0]:
             parameters = {
-                "gearnet_freeze_layer": gearnet_freeze_layer,
-                "bert_freeze_layer": bert_freeze_layer,
-                "pretrained_layers": pretrained_layers,
                 "bce_weight": bce_weight,
+                "lr": 1e-3,
             }
             print(parameters)
-            result = run_exp_pure(**parameters)
-            data = add_to_data(data, parameters, result)
-            with open(FILE_PATH, 'w') as f:
-                json.dump(data, f, indent=2)
+            result = run_exp_pure(
+                **parameters,
+                gearnet_freeze_layer=0,
+                bert_freeze_layer=29,
+                pretrained_layers=4,
+                pretrained_weight_file='ResidueType_lmg_4_512_0.57268.pth',
+                pretrained_weight_has_lm=False,
+            )
+            new_row = pd.DataFrame.from_dict([{**parameters, **result[-4]}])
+            df = pd.concat([df, new_row])
+            df.to_csv(CSV_PATH, index=False)
+
+def main_edge_type():
+    CSV_PATH = 'lmg_pretrained_pipeline_edge_type.csv'
+    df = read_initial_csv(CSV_PATH)
+    for trial in range(5):
+        for knn_k in [10, 20]:
+            for spatial_radius in [10.0, 20.0]:
+                for sequential_max_distance in range(2, 9):
+                    parameters = {
+                        'knn_k': knn_k,
+                        'spatial_radius': spatial_radius,
+                        'sequential_max_distance': sequential_max_distance,
+                        'lr': 5e-4,
+                    }
+                    print(parameters)
+                    result = run_exp_pure(
+                        **parameters,
+                        gearnet_freeze_layer=0,
+                        bert_freeze_layer=29,
+                        pretrained_layers=4,
+                        pretrained_weight_file=None,
+                        batch_size=2,
+                    )
+                    new_row = pd.DataFrame.from_dict([{**parameters, **result[-4]}])
+                    df = pd.concat([df, new_row])
+                    df.to_csv(CSV_PATH, index=False)
+                    
+        
 
 def main_l2_reg(data, file_path):
     for trial in range(5):
@@ -136,7 +174,7 @@ def main_lmg_30_4_6():
             "bert_freeze_layer": 29, # pretrain할때는 freeze 30, finetune할때는 freeze 29
             "pretrained_layers": 4,
             "bce_weight": 2,
-            "graph_sequential_max_distance": 6, # test point
+            "sequential_max_distance": 6, # test point
         }
         print(parameters)
         result = run_exp_pure(

@@ -13,7 +13,7 @@ from .tasks import NodePropertyPrediction
 from .datasets import ATPBind, ATPBind3D
 from .bert import BertWrapModel
 from .custom_models import GearNetWrapModel, LMGearNetModel
-from .utils import dict_tensor_to_num
+from .utils import dict_tensor_to_num, round_dict
 
 class DisableLogger():
     def __enter__(self):
@@ -120,7 +120,7 @@ class Pipeline:
                 bce_weight=torch.tensor([bce_weight], device=torch.device(f'cuda:{self.gpus[0]}')),
             )
         
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=1e-3, **optimizer_kwargs)
+        optimizer = torch.optim.Adam(self.model.parameters(), **optimizer_kwargs)
         with DisableLogger():
             self.solver = core.Engine(self.task,
                                         self.train_set,
@@ -138,6 +138,7 @@ class Pipeline:
         return self.solver.train(num_epoch=num_epoch)
     
     def train_until_fit(self, patience=1):
+        from timer_cm import Timer
         from itertools import count
         train_record = []
         for epoch in count(start=1):
@@ -146,9 +147,11 @@ class Pipeline:
                 self.train(num_epoch=1)
                 cur_result = self.evaluate()
                 cur_result['train_bce'] = self.get_last_bce()
+                cur_result['valid_bce'] = self.calculate_valid_loss()
                 cur_result['valid_mcc'] = self.calculate_best_mcc_and_threshold(
                     threshold_set='valid'
                 )['best_mcc']
+                cur_result = round_dict(cur_result, 4)
                 train_record.append(cur_result)
                 print(cur_result)
                 max_mcc_index = np.argmax([record['valid_mcc'] for record in train_record])
