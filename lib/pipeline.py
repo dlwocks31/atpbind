@@ -65,12 +65,14 @@ class Pipeline:
                  gpus,
                  model_kwargs={},
                  optimizer_kwargs={},
+                 task_kwargs={},
                  graph_knn_k=10,
                  graph_spatial_radius=10.0,
                  graph_sequential_max_distance=2,
                  batch_size=1,
                  bce_weight=1,
-                 verbose=False):
+                 verbose=False,
+                 ):
         self.gpus = gpus
 
         if model not in self.possible_models:
@@ -98,6 +100,7 @@ class Pipeline:
                 num_mlp_layer=2,
                 metric=METRICS_USING,
                 bce_weight=torch.tensor([bce_weight], device=torch.device(f'cuda:{self.gpus[0]}')),
+                **task_kwargs,
             )
         elif dataset == 'atpbind3d' or dataset == 'atpbind3d-minimal':
             edge_layers = [
@@ -118,6 +121,7 @@ class Pipeline:
                 num_mlp_layer=2,
                 metric=METRICS_USING,
                 bce_weight=torch.tensor([bce_weight], device=torch.device(f'cuda:{self.gpus[0]}')),
+                **task_kwargs,
             )
         
         optimizer = torch.optim.Adam(self.model.parameters(), **optimizer_kwargs)
@@ -195,7 +199,7 @@ class Pipeline:
         targets = []
         thresholds = np.linspace(-3, 1, num=41)
         mcc_values = [0 for i in range(len(thresholds))]
-
+        self.model.eval()
         with torch.no_grad():
             for batch in dataloader:
                 batch = utils.cuda(batch, device=torch.device(f'cuda:{self.gpus[0]}'))
@@ -220,8 +224,9 @@ class Pipeline:
         }
 
 
-    def evaluate(self, threshold_set='valid'):
-        threshold = self.calculate_best_mcc_and_threshold(threshold_set)['best_threshold']
-        # print(f'threshold: {threshold}\n')
-        self.task.threshold = threshold
+    def evaluate(self, threshold_set='valid', verbose=False):
+        mcc_and_threshold = self.calculate_best_mcc_and_threshold(threshold_set)
+        if verbose:
+            print(f'threshold: {mcc_and_threshold}\n')
+        self.task.threshold = mcc_and_threshold['best_threshold']
         return dict_tensor_to_num(self.solver.evaluate("test"))
