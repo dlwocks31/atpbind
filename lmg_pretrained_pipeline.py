@@ -19,6 +19,7 @@ def run_exp_pure(bert_freeze_layer,
                  knn_k=10,
                  spatial_radius=10.0,
                  sequential_max_distance=2,
+                 patience=3,
                  ):
     pipeline = Pipeline(
         model='lm-gearnet',
@@ -50,7 +51,7 @@ def run_exp_pure(bert_freeze_layer,
     
     pipeline.model.freeze_gearnet(freeze_layer_count=gearnet_freeze_layer)
 
-    train_record = pipeline.train_until_fit(patience=3)
+    train_record = pipeline.train_until_fit(patience=patience)
     return train_record
 
 
@@ -77,25 +78,28 @@ def add_to_data(file_data, parameters, trial):
 
 def main_bce_weight():
     CSV_PATH = 'lmg_pretrained_pipeline_main_bce_weight.csv'
-    df = read_initial_csv(CSV_PATH)
     for trial in range(5):
-        for bce_weight in [0.1, 0.25, 0.5, 1.0, 2.0, 4.0, 10.0, 20.0, 40.0]:
-            parameters = {
-                "bce_weight": bce_weight,
-                "lr": 1e-3,
-            }
-            print(parameters)
-            result = run_exp_pure(
-                **parameters,
-                gearnet_freeze_layer=0,
-                bert_freeze_layer=29,
-                pretrained_layers=4,
-                pretrained_weight_file='ResidueType_lmg_4_512_0.57268.pth',
-                pretrained_weight_has_lm=False,
-            )
-            new_row = pd.DataFrame.from_dict([{**parameters, **result[-4]}])
-            df = pd.concat([df, new_row])
-            df.to_csv(CSV_PATH, index=False)
+        for bce_weight in [1.0]:
+            for freeze_layer in [0]:
+                patience = 10
+                parameters = {
+                    "bce_weight": bce_weight,
+                    "bert_freeze_layer": 28,
+                    "gearnet_freeze_layer": freeze_layer,
+                    "lr": 5e-5,
+                    "patience": patience,
+                }
+                print(parameters)
+                result = run_exp_pure(
+                    **parameters,
+                    pretrained_layers=4,
+                    pretrained_weight_file='ResidueType_lmg_4_512_0.57268.pth',
+                    pretrained_weight_has_lm=False,
+                )
+                new_row = pd.DataFrame.from_dict([{**parameters, **result[-1-patience]}])
+                df = read_initial_csv(CSV_PATH)
+                df = pd.concat([df, new_row])
+                df.to_csv(CSV_PATH, index=False)
 
 def main_edge_type():
     CSV_PATH = 'lmg_pretrained_pipeline_edge_type.csv'
