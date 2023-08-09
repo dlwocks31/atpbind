@@ -69,14 +69,13 @@ def read_initial_csv(path):
         return pd.DataFrame()
 
 
-def main():
+def main(undersample_rate):
     CSV_PATH = 'rus_pipeline.csv'
     
     for trial in range(30):
         print(f'Start {trial} at {pd.Timestamp.now()}')
         seed = trial % 10
         patience = 10
-        undersample_rate = 0.1
         parameters = {
             "bce_weight": 1,
             "bert_freeze_layer": 29,
@@ -139,6 +138,7 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--gpu', type=int, default=0)
+    parser.add_argument('--undersample_rate', type=float, default=0.05)
     args = parser.parse_args()
     GPU = args.gpu
     main()
