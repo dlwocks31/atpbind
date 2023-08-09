@@ -1,23 +1,29 @@
-import sys, os
+import sys
+import os
+
 sys.path.insert(0, os.path.abspath('..'))
+
+import pandas as pd
 from lib.pipeline import Pipeline
 import torch
-import pandas as pd
+
 
 GPU = 0
+
 
 def run_exp_pure(bert_freeze_layer,
                  pretrained_layers,
                  bce_weight=1.0,
-                gearnet_freeze_layer=0,
-                pretrained_weight_file='ResidueType_lmg_4_512_0.57268.pth',
-                pretrained_weight_has_lm=False,
-                lr=1e-3,
-                batch_size=4,
-                patience=3,
-                use_rus=False,
-                rus_seed=0,
-                    ):
+                 gearnet_freeze_layer=0,
+                 pretrained_weight_file='ResidueType_lmg_4_512_0.57268.pth',
+                 pretrained_weight_has_lm=False,
+                 lr=1e-3,
+                 batch_size=4,
+                 patience=3,
+                 use_rus=False,
+                 rus_seed=0,
+                 undersample_rate=0.1,
+                 ):
     pipeline = Pipeline(
         model='lm-gearnet',
         dataset='atpbind3d',
@@ -35,21 +41,25 @@ def run_exp_pure(bert_freeze_layer,
         task_kwargs={
             'use_rus': use_rus,
             'rus_seed': rus_seed,
+            'undersample_rate': undersample_rate,
         },
         bce_weight=bce_weight,
         batch_size=batch_size,
     )
     if pretrained_weight_file is not None:
-        state_dict = torch.load(pretrained_weight_file, map_location=f'cuda:{GPU}')
+        state_dict = torch.load(pretrained_weight_file,
+                                map_location=f'cuda:{GPU}')
         if pretrained_weight_has_lm:
             pipeline.model.load_state_dict(state_dict)
         else:
             pipeline.model.gearnet.load_state_dict(state_dict)
-    
+
     pipeline.model.freeze_gearnet(freeze_layer_count=gearnet_freeze_layer)
 
-    train_record = pipeline.train_until_fit(patience=patience)
-    return (train_record, pipeline)
+    train_record, state_dict = pipeline.train_until_fit(
+        patience=patience, return_state_dict=True)
+    return (train_record, state_dict)
+
 
 def read_initial_csv(path):
     try:
@@ -58,39 +68,72 @@ def read_initial_csv(path):
         # File does not exist, or it is empty
         return pd.DataFrame()
 
+
 def main():
     CSV_PATH = 'rus_pipeline.csv'
-    for trial in range(5, 10):
-        patience = 3
+    
+    for trial in range(30):
+        print(f'Start {trial} at {pd.Timestamp.now()}')
+        seed = trial % 10
+        patience = 10
+        undersample_rate = 0.1
         parameters = {
             "bce_weight": 1,
             "bert_freeze_layer": 29,
             "gearnet_freeze_layer": 0,
-            "lr": 5e-4,
+            "lr": 2e-4,
             "patience": patience,
             "use_rus": True,
-            "rus_seed": trial,
+            "rus_seed": seed,
+            "undersample_rate": undersample_rate,
         }
         print(parameters)
-        result, pipeline = run_exp_pure(
+        result, state_dict = run_exp_pure(
             **parameters,
             pretrained_layers=4,
             pretrained_weight_file='../ResidueType_lmg_4_512_0.57268.pth',
             pretrained_weight_has_lm=False,
         )
-        new_row = pd.DataFrame.from_dict([{**parameters, **result[-1-patience]}])
+        max_valid_mcc_row = result[-1-patience]
+        new_row = pd.DataFrame.from_dict(
+            [{**parameters, **max_valid_mcc_row}])
         df = read_initial_csv(CSV_PATH)
         df = pd.concat([df, new_row])
         df.to_csv(CSV_PATH, index=False)
         # save model
-        torch.save({
-            k: v for k, v in pipeline.task.state_dict().items()
-                if (not k.startswith('model.bert_model.encoder.layer') or 
+        prefix = f'rus_{int(undersample_rate*100)}_{seed}'
+        if should_save(prefix, max_valid_mcc_row["mcc"]):
+            files = find_files_with_prefix(prefix)
+            print(
+                f'files: {files}, max_valid_mcc_row["mcc"]: {max_valid_mcc_row["mcc"]}')
+            torch.save({
+                k: v for k, v in state_dict.items()
+                if (not k.startswith('model.bert_model.encoder.layer') or
                     k.startswith('model.bert_model.encoder.layer.29')
-                )
-        },
-            f'rus_pipeline_{trial}_{result[-1]["mcc"]:.5f}.pth'
-        )
+                    )
+            },
+                f'{prefix}_{max_valid_mcc_row["mcc"]:.4f}.pth'
+            )
+
+
+def find_files_with_prefix(prefix):
+    import re
+    current_dir = os.getcwd()
+    files_with_prefix = []
+    for filename in os.listdir(current_dir):
+        match_obj = re.match(f'{prefix}_(0\.\d*)\.pth', filename)
+        if match_obj:
+            files_with_prefix.append((filename, float(match_obj.group(1))))
+    return files_with_prefix
+
+
+def should_save(prefix, current_mcc):
+    files_with_prefix = find_files_with_prefix(prefix)
+    files_with_prefix.sort(key=lambda x: x[1])
+    if len(files_with_prefix) == 0:
+        return True
+    return current_mcc > files_with_prefix[0][1]
+
 
 if __name__ == '__main__':
     import argparse

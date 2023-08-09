@@ -21,6 +21,7 @@ class NodePropertyPrediction(tasks.Task, core.Configurable):
                  bce_weight=1.0,
                  use_rus=False,
                  rus_seed=0,
+                 undersample_rate=0.1,
                  ):
         super(NodePropertyPrediction, self).__init__()
         self.model = model
@@ -36,6 +37,7 @@ class NodePropertyPrediction(tasks.Task, core.Configurable):
         self.bce_weight = bce_weight
         self.use_rus = use_rus
         self.rus_seed = rus_seed
+        self.undersample_rate = undersample_rate
 
     def preprocess(self, train_set, valid_set, test_set):
         """
@@ -112,10 +114,9 @@ class NodePropertyPrediction(tasks.Task, core.Configurable):
                 raise ValueError("Unknown criterion `%s`" % criterion)
             
             if self.use_rus:
-                negative_use_prob = 0.1
                 torch.random.manual_seed(self.rus_seed)
                 random_tensor = torch.rand(loss.shape, device=self.device)
-                cost_mask = ((target['label'] == 1) + (random_tensor < negative_use_prob))
+                cost_mask = ((target['label'] == 1) + (random_tensor < self.undersample_rate))
                 loss = loss * cost_mask.float()
             loss = functional.masked_mean(loss, labeled, dim=0)
 
@@ -178,3 +179,22 @@ class NodePropertyPrediction(tasks.Task, core.Configurable):
         fn = (target * (1 - pred)).sum()
         assert(tp + tn + fp + fn == len(pred))
         return tp, tn, fp, fn
+    
+
+class MeanEnsembleNodePropertyPrediction(NodePropertyPrediction):
+    def __init__(self, model, state_dict_files, *args, **kwargs):
+        super().__init__(model, *args, **kwargs)
+        self.state_dict_files = state_dict_files
+    
+    def predict(self, batch, all_loss=None, metric=None):
+        mean_prediction = None
+        for model_file in self.state_dict_files:
+            self.load_state_dict(torch.load(model_file, map_location=self.device), strict=False)
+            current_prediction = super(MeanEnsembleNodePropertyPrediction, self).predict(batch, all_loss, metric)
+            if mean_prediction is None:
+                mean_prediction = current_prediction
+            else:
+                mean_prediction += current_prediction
+        mean_prediction /= len(self.state_dict_files)
+
+        return mean_prediction

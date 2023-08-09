@@ -1,3 +1,4 @@
+from copy import deepcopy
 from torchdrug import transforms, data, core, layers, tasks, metrics, utils, models
 from torchdrug.layers import functional, geometry
 from torchdrug.core import Registry as R
@@ -9,7 +10,7 @@ import logging
 import numpy as np
 from functools import cache
 
-from .tasks import NodePropertyPrediction
+from .tasks import NodePropertyPrediction, MeanEnsembleNodePropertyPrediction
 from .datasets import ATPBind, ATPBind3D
 from .bert import BertWrapModel
 from .custom_models import GearNetWrapModel, LMGearNetModel
@@ -63,6 +64,7 @@ class Pipeline:
                  model,
                  dataset,
                  gpus,
+                 task='npp',
                  model_kwargs={},
                  optimizer_kwargs={},
                  task_kwargs={},
@@ -114,15 +116,30 @@ class Pipeline:
                 edge_layers=edge_layers,
                 edge_feature="gearnet"
             )
-            self.task = NodePropertyPrediction(
-                self.model,
-                graph_construction_model=graph_construction_model,
-                normalization=False,
-                num_mlp_layer=2,
-                metric=METRICS_USING,
-                bce_weight=torch.tensor([bce_weight], device=torch.device(f'cuda:{self.gpus[0]}')),
+            task_kwargs = {
+                'graph_construction_model': graph_construction_model,
+                'normalization': False,
+                'num_mlp_layer': 2,
+                'metric': METRICS_USING,
+                'bce_weight': torch.tensor([bce_weight], device=torch.device(f'cuda:{self.gpus[0]}')),
                 **task_kwargs,
-            )
+            }
+            
+            if task == 'npp':
+                self.task = NodePropertyPrediction(
+                    self.model,
+                    **task_kwargs,
+                )
+            elif task == 'mean-ensemble':
+                self.task = MeanEnsembleNodePropertyPrediction(
+                    self.model,
+                    **task_kwargs,
+                )
+            else:
+                raise ValueError('Task must be one of {}'.format(['npp', 'me_npp']))
+
+
+
         
         optimizer = torch.optim.Adam(self.model.parameters(), **optimizer_kwargs)
         with DisableLogger():
@@ -141,10 +158,11 @@ class Pipeline:
     def train(self, num_epoch):
         return self.solver.train(num_epoch=num_epoch)
     
-    def train_until_fit(self, patience=1):
-        from timer_cm import Timer
+    def train_until_fit(self, patience=1, return_state_dict=False):
         from itertools import count
         train_record = []
+        best_state_dict = None
+        best_valid_mcc = -1
         for epoch in count(start=1):
             cm = contextlib.nullcontext() if self.verbose else DisableLogger()
             with cm:
@@ -158,10 +176,16 @@ class Pipeline:
                 cur_result = round_dict(cur_result, 4)
                 train_record.append(cur_result)
                 print(cur_result)
+                if return_state_dict and cur_result['valid_mcc'] > best_valid_mcc:
+                    best_valid_mcc = cur_result['valid_mcc']
+                    best_state_dict = deepcopy(self.task.state_dict())
                 max_mcc_index = np.argmax([record['valid_mcc'] for record in train_record])
                 if max_mcc_index < len(train_record) - patience:
                     break
-        return train_record
+        if return_state_dict:
+            return (train_record, best_state_dict)
+        else:
+            return train_record
         
 
     def get_last_bce(self):
