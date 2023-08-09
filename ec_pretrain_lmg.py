@@ -28,6 +28,10 @@ def parse_args():
                         help="Batch size for training")
     parser.add_argument("--sequential_max_distance", type=int, default=2,
                         help="Max distance for sequential edge")
+    parser.add_argument("--lr", type=float, default=1e-5,
+                        help="Learning rate")
+    parser.add_argument("--dataset", type=str, default="ec",
+                        help="Dataset to use")
     return parser.parse_args()
 
 
@@ -45,9 +49,14 @@ def main():
     transform = transforms.Compose(
         [truncuate_transform, protein_view_transform])
 
-    dataset = datasets.EnzymeCommission(
-        "~/protein-datasets/", transform=transform, atom_feature=None, bond_feature=None)
+    if args.dataset == 'ec':
+        dataset = datasets.EnzymeCommission(
+            "~/protein-datasets/", transform=transform, atom_feature=None, bond_feature=None)
+    elif args.dataset == 'go':
+        dataset = datasets.GeneOntology(
+            "~/protein-datasets/", transform=transform, atom_feature=None, bond_feature=None)
     train_set, valid_set, test_set = dataset.split()
+        
     print(dataset)
     print("train samples: %d, valid samples: %d, test samples: %d" %
           (len(train_set), len(valid_set), len(test_set)))
@@ -71,7 +80,7 @@ def main():
     task = tasks.AttributeMasking(lm_gearnet, graph_construction_model=graph_construction_model,
                                   mask_rate=0.15, num_mlp_layer=2)
 
-    optimizer = torch.optim.Adam(task.parameters(), lr=1e-4)
+    optimizer = torch.optim.Adam(task.parameters(), lr=args.lr)
     with DisableLogger():
         solver = core.Engine(task, train_set, valid_set, test_set, optimizer,
                              gpus=[args.gpu], batch_size=args.batch_size)
@@ -111,7 +120,7 @@ def validate_and_save(solver, lm_gearnet, args):
                 f"RuntimeError occurred: fail_cnt = {fail_cnt}. Continue validating")
             sleep(60)
 
-    name_prefix = f"lmg_{args.bert_freeze_layer_count}_{args.hidden_dim_count}_{args.sequential_max_distance}"
+    name_prefix = f"lmg_{args.dataset}_{args.hidden_dim_count}"
     files, accuracy = parse_current_saved_weight(name_prefix)
     if accuracy < result['accuracy'].item():
         print(f"Saving weight with accuracy {result['accuracy']:.5f}")
