@@ -69,52 +69,52 @@ def read_initial_csv(path):
         return pd.DataFrame()
 
 
-def main(undersample_rate):
+def main(undersample_rate, seed_start, seed_end):
     CSV_PATH = 'rus_pipeline.csv'
     
-    for trial in range(30):
-        print(f'Start {trial} at {pd.Timestamp.now()}')
-        seed = trial % 10 + 10
-        patience = 10
-        parameters = {
-            "bce_weight": 1,
-            "bert_freeze_layer": 29,
-            "gearnet_freeze_layer": 0,
-            "lr": 2e-4,
-            "patience": patience,
-            "use_rus": True,
-            "rus_seed": seed,
-            "undersample_rate": undersample_rate,
-        }
-        print(parameters)
-        result, state_dict = run_exp_pure(
-            **parameters,
-            pretrained_layers=4,
-            pretrained_weight_file='../ResidueType_lmg_4_512_0.57268.pth',
-            pretrained_weight_has_lm=False,
-        )
-        max_valid_mcc_row = result[-1-patience]
-        new_row = pd.DataFrame.from_dict(
-            [{**parameters, **max_valid_mcc_row}])
-        df = read_initial_csv(CSV_PATH)
-        df = pd.concat([df, new_row])
-        df.to_csv(CSV_PATH, index=False)
-        # save model
-        prefix = f'rus_{int(undersample_rate*100)}_{seed}'
-        
-        valid_mcc = max_valid_mcc_row["valid_mcc"]
-        if should_save(prefix, valid_mcc):
-            files = find_files_with_prefix(prefix)
-            print(
-                f'files: {files}, valid_mcc: {valid_mcc}')
-            torch.save({
-                k: v for k, v in state_dict.items()
-                if (not k.startswith('model.bert_model.encoder.layer') or
-                    k.startswith('model.bert_model.encoder.layer.29')
-                    )
-            },
-                f'{prefix}_{valid_mcc:.4f}.pth'
+    for trial in range(3):
+        for seed in range(seed_start, seed_end):
+            print(f'Start {trial} at {pd.Timestamp.now()}, seed={seed}')
+            patience = 10
+            parameters = {
+                "bce_weight": 1,
+                "bert_freeze_layer": 29,
+                "gearnet_freeze_layer": 0,
+                "lr": 2e-4,
+                "patience": patience,
+                "use_rus": True,
+                "rus_seed": seed,
+                "undersample_rate": undersample_rate,
+            }
+            print(parameters)
+            result, state_dict = run_exp_pure(
+                **parameters,
+                pretrained_layers=4,
+                pretrained_weight_file='../ResidueType_lmg_4_512_0.57268.pth',
+                pretrained_weight_has_lm=False,
             )
+            max_valid_mcc_row = result[-1-patience]
+            new_row = pd.DataFrame.from_dict(
+                [{**parameters, **max_valid_mcc_row}])
+            df = read_initial_csv(CSV_PATH)
+            df = pd.concat([df, new_row])
+            df.to_csv(CSV_PATH, index=False)
+            # save model
+            prefix = f'rus_{int(undersample_rate*100)}_{seed}'
+            
+            valid_mcc = max_valid_mcc_row["valid_mcc"]
+            if should_save(prefix, valid_mcc):
+                files = find_files_with_prefix(prefix)
+                print(
+                    f'files: {files}, valid_mcc: {valid_mcc}')
+                torch.save({
+                    k: v for k, v in state_dict.items()
+                    if (not k.startswith('model.bert_model.encoder.layer') or
+                        k.startswith('model.bert_model.encoder.layer.29')
+                        )
+                },
+                    f'{prefix}_{valid_mcc:.4f}.pth'
+                )
 
 
 def find_files_with_prefix(prefix):
@@ -141,6 +141,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--gpu', type=int, default=0)
     parser.add_argument('--undersample_rate', type=float, default=0.05)
+    parser.add_argument('--seed_start', type=int, default=0)
+    parser.add_argument('--seed_end', type=int, default=10)
     args = parser.parse_args()
     GPU = args.gpu
-    main(undersample_rate=args.undersample_rate)
+    main(undersample_rate=args.undersample_rate, seed_start=args.seed_start, seed_end=args.seed_end)
