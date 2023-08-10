@@ -249,9 +249,12 @@ class Pipeline:
         }
 
 
-    def evaluate(self, threshold_set='valid', verbose=False):
-        mcc_and_threshold = self.calculate_best_mcc_and_threshold(threshold_set)
-        if verbose:
-            print(f'threshold: {mcc_and_threshold}\n')
-        self.task.threshold = mcc_and_threshold['best_threshold']
+    def evaluate(self, verbose=False, threshold=0):
+        if threshold == 'auto':
+            mcc_and_threshold = self.calculate_best_mcc_and_threshold(threshold_set='valid')
+            if verbose:
+                print(f'threshold: {mcc_and_threshold}\n')
+            self.task.threshold = mcc_and_threshold['best_threshold']
+        else:
+            self.task.threshold = threshold
         return dict_tensor_to_num(self.solver.evaluate("test"))
