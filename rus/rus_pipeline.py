@@ -74,7 +74,7 @@ def main(undersample_rate):
     
     for trial in range(30):
         print(f'Start {trial} at {pd.Timestamp.now()}')
-        seed = trial % 10
+        seed = trial % 10 + 10
         patience = 10
         parameters = {
             "bce_weight": 1,
@@ -101,17 +101,19 @@ def main(undersample_rate):
         df.to_csv(CSV_PATH, index=False)
         # save model
         prefix = f'rus_{int(undersample_rate*100)}_{seed}'
-        if should_save(prefix, max_valid_mcc_row["mcc"]):
+        
+        valid_mcc = max_valid_mcc_row["valid_mcc"]
+        if should_save(prefix, valid_mcc):
             files = find_files_with_prefix(prefix)
             print(
-                f'files: {files}, max_valid_mcc_row["mcc"]: {max_valid_mcc_row["mcc"]}')
+                f'files: {files}, valid_mcc: {valid_mcc}')
             torch.save({
                 k: v for k, v in state_dict.items()
                 if (not k.startswith('model.bert_model.encoder.layer') or
                     k.startswith('model.bert_model.encoder.layer.29')
                     )
             },
-                f'{prefix}_{max_valid_mcc_row["mcc"]:.4f}.pth'
+                f'{prefix}_{valid_mcc:.4f}.pth'
             )
 
 
@@ -141,4 +143,4 @@ if __name__ == '__main__':
     parser.add_argument('--undersample_rate', type=float, default=0.05)
     args = parser.parse_args()
     GPU = args.gpu
-    main()
+    main(undersample_rate=args.undersample_rate)

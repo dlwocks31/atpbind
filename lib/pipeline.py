@@ -154,6 +154,7 @@ class Pipeline:
             )
         
         self.verbose = verbose
+        self.batch_size = batch_size
         
     def train(self, num_epoch):
         return self.solver.train(num_epoch=num_epoch)
@@ -215,7 +216,7 @@ class Pipeline:
     def calculate_best_mcc_and_threshold(self, threshold_set='valid'):
         dataloader = data.DataLoader(
             self.valid_set if threshold_set == 'valid' else self.test_set,
-            batch_size=1,
+            batch_size=self.batch_size,
             shuffle=False
         )
 
