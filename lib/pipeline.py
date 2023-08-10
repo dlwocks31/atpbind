@@ -198,7 +198,7 @@ class Pipeline:
     
     def calculate_valid_loss(self):
         from statistics import mean
-        dataloader = data.DataLoader(self.valid_set, batch_size=1, shuffle=False)
+        dataloader = data.DataLoader(self.valid_set, batch_size=self.batch_size, shuffle=False)
         model = self.task
 
         model.eval()
