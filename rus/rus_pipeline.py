@@ -23,6 +23,7 @@ def run_exp_pure(bert_freeze_layer,
                  use_rus=False,
                  rus_seed=0,
                  undersample_rate=0.1,
+                 early_stop_metric='valid_mcc',
                  ):
     pipeline = Pipeline(
         model='lm-gearnet',
@@ -57,7 +58,10 @@ def run_exp_pure(bert_freeze_layer,
     pipeline.model.freeze_gearnet(freeze_layer_count=gearnet_freeze_layer)
 
     train_record, state_dict = pipeline.train_until_fit(
-        patience=patience, return_state_dict=True)
+        patience=patience, 
+        early_stop_metric=early_stop_metric,
+        return_state_dict=True
+    )
     return (train_record, state_dict)
 
 
@@ -69,7 +73,7 @@ def read_initial_csv(path):
         return pd.DataFrame()
 
 
-def main(undersample_rate, seed_start, seed_end):
+def main(undersample_rate, seed_start, seed_end, lr):
     CSV_PATH = 'rus_pipeline.csv'
     
     for trial in range(3):
@@ -80,11 +84,12 @@ def main(undersample_rate, seed_start, seed_end):
                 "bce_weight": 1,
                 "bert_freeze_layer": 29,
                 "gearnet_freeze_layer": 0,
-                "lr": 2e-4,
+                "lr": lr,
                 "patience": patience,
                 "use_rus": True,
                 "rus_seed": seed,
                 "undersample_rate": undersample_rate,
+                "early_stop_metric": "valid_bce",
             }
             print(parameters)
             result, state_dict = run_exp_pure(
@@ -100,20 +105,24 @@ def main(undersample_rate, seed_start, seed_end):
             df = pd.concat([df, new_row])
             df.to_csv(CSV_PATH, index=False)
             # save model
+            early_stop_metric_name = parameters['early_stop_metric']
+
             prefix = f'rus_{int(undersample_rate*100)}_{seed}'
+            if early_stop_metric_name == 'valid_bce':
+                prefix += '_bce'
             
-            valid_mcc = max_valid_mcc_row["valid_mcc"]
-            if should_save(prefix, valid_mcc):
+            early_stop_metric = max_valid_mcc_row[early_stop_metric_name]
+            if should_save(prefix, early_stop_metric, lower_is_better=(early_stop_metric_name == 'valid_bce')):
                 files = find_files_with_prefix(prefix)
                 print(
-                    f'files: {files}, valid_mcc: {valid_mcc}')
+                    f'files: {files}, {early_stop_metric_name}: {early_stop_metric}')
                 torch.save({
                     k: v for k, v in state_dict.items()
                     if (not k.startswith('model.bert_model.encoder.layer') or
                         k.startswith('model.bert_model.encoder.layer.29')
                         )
                 },
-                    f'{prefix}_{valid_mcc:.4f}.pth'
+                    f'{prefix}_{early_stop_metric:.4f}.pth'
                 )
 
 
@@ -128,12 +137,12 @@ def find_files_with_prefix(prefix):
     return files_with_prefix
 
 
-def should_save(prefix, current_mcc):
+def should_save(prefix, current_metric, lower_is_better=False):
     files_with_prefix = find_files_with_prefix(prefix)
     files_with_prefix.sort(key=lambda x: x[1])
     if len(files_with_prefix) == 0:
         return True
-    return current_mcc > files_with_prefix[0][1]
+    return current_metric < files_with_prefix[0][1] if lower_is_better else current_metric > files_with_prefix[0][1]
 
 
 if __name__ == '__main__':
@@ -143,6 +152,11 @@ if __name__ == '__main__':
     parser.add_argument('--undersample_rate', type=float, default=0.05)
     parser.add_argument('--seed_start', type=int, default=0)
     parser.add_argument('--seed_end', type=int, default=10)
+    parser.add_argument('--lr', type=float, default=2e-4)
     args = parser.parse_args()
     GPU = args.gpu
-    main(undersample_rate=args.undersample_rate, seed_start=args.seed_start, seed_end=args.seed_end)
+    main(undersample_rate=args.undersample_rate, 
+         seed_start=args.seed_start, 
+         seed_end=args.seed_end,
+         lr=args.lr
+         )
