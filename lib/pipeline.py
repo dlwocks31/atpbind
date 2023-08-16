@@ -159,11 +159,14 @@ class Pipeline:
     def train(self, num_epoch):
         return self.solver.train(num_epoch=num_epoch)
     
-    def train_until_fit(self, patience=1, return_state_dict=False):
+    def train_until_fit(self, patience=1, early_stop_metric='valid_mcc', return_state_dict=False):
+        if early_stop_metric not in ['valid_mcc', 'valid_bce']:
+            raise ValueError('early_stop_metric must be one of {}'.format(['valid_mcc', 'valid_bce']))
         from itertools import count
         train_record = []
         best_state_dict = None
-        best_valid_mcc = -1
+        best_metric = -1 if early_stop_metric == 'valid_mcc' else 1e10
+        
         for epoch in count(start=1):
             cm = contextlib.nullcontext() if self.verbose else DisableLogger()
             with cm:
@@ -177,11 +180,12 @@ class Pipeline:
                 cur_result = round_dict(cur_result, 4)
                 train_record.append(cur_result)
                 print(cur_result)
-                if return_state_dict and cur_result['valid_mcc'] > best_valid_mcc:
-                    best_valid_mcc = cur_result['valid_mcc']
+                should_replace_best_metric = cur_result['valid_mcc'] > best_metric if early_stop_metric == 'valid_mcc' else cur_result['valid_bce'] < best_metric
+                if return_state_dict and should_replace_best_metric:
+                    best_metric = cur_result[early_stop_metric]
                     best_state_dict = deepcopy(self.task.state_dict())
-                max_mcc_index = np.argmax([record['valid_mcc'] for record in train_record])
-                if max_mcc_index < len(train_record) - patience:
+                best_index = np.argmax([record[early_stop_metric] for record in train_record]) if early_stop_metric == 'valid_mcc' else np.argmin([record[early_stop_metric] for record in train_record])
+                if best_index < len(train_record) - patience:
                     break
         if return_state_dict:
             return (train_record, best_state_dict)
