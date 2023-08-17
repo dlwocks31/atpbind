@@ -74,6 +74,7 @@ class Pipeline:
                  batch_size=1,
                  bce_weight=1,
                  verbose=False,
+                 optimizer='adam',
                  ):
         self.gpus = gpus
 
@@ -140,8 +141,13 @@ class Pipeline:
 
 
 
-        
-        optimizer = torch.optim.Adam(self.model.parameters(), **optimizer_kwargs)
+        if not optimizer in ['adam', 'adamw']:
+            raise ValueError('Optimizer must be one of {}'.format(['adam', 'adamw']))
+        if optimizer == 'adam':
+            optimizer = torch.optim.Adam(self.model.parameters(), **optimizer_kwargs)
+        elif optimizer == 'adamw':
+            optimizer = torch.optim.AdamW(self.model.parameters(), **optimizer_kwargs)
+
         with DisableLogger():
             self.solver = core.Engine(self.task,
                                         self.train_set,

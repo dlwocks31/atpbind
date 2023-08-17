@@ -24,6 +24,7 @@ def run_exp_pure(bert_freeze_layer,
                  rus_seed=0,
                  undersample_rate=0.1,
                  early_stop_metric='valid_mcc',
+                 optimizer='adam',
                  ):
     pipeline = Pipeline(
         model='lm-gearnet',
@@ -38,6 +39,7 @@ def run_exp_pure(bert_freeze_layer,
         },
         optimizer_kwargs={
             'lr': lr,
+            'weight_decay': 0.0001 if optimizer == 'adamw' else 0,
         },
         task_kwargs={
             'use_rus': use_rus,
@@ -46,6 +48,7 @@ def run_exp_pure(bert_freeze_layer,
         },
         bce_weight=bce_weight,
         batch_size=batch_size,
+        optimizer=optimizer,
     )
     if pretrained_weight_file is not None:
         state_dict = torch.load(pretrained_weight_file,
@@ -82,14 +85,15 @@ def main(undersample_rate, seed_start, seed_end, lr):
             patience = 10
             parameters = {
                 "bce_weight": 1,
-                "bert_freeze_layer": 29,
+                "bert_freeze_layer": 27,
                 "gearnet_freeze_layer": 0,
                 "lr": lr,
                 "patience": patience,
                 "use_rus": True,
                 "rus_seed": seed,
                 "undersample_rate": undersample_rate,
-                "early_stop_metric": "valid_bce",
+                "early_stop_metric": "valid_mcc",
+                "optimizer": "adam",
             }
             print(parameters)
             result, state_dict = run_exp_pure(
@@ -116,10 +120,11 @@ def main(undersample_rate, seed_start, seed_end, lr):
                 files = find_files_with_prefix(prefix)
                 print(
                     f'files: {files}, {early_stop_metric_name}: {early_stop_metric}')
+                encoder_layers = [f'model.bert_model.encoder.layer.{i}' for i in range(parameters['bert_freeze_layer'], 30)]
                 torch.save({
                     k: v for k, v in state_dict.items()
                     if (not k.startswith('model.bert_model.encoder.layer') or
-                        k.startswith('model.bert_model.encoder.layer.29')
+                        any(k.startswith(layer) for layer in encoder_layers)
                         )
                 },
                     f'{prefix}_{early_stop_metric:.4f}.pth'
