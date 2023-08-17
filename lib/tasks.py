@@ -113,7 +113,8 @@ class NodePropertyPrediction(tasks.Task, core.Configurable):
             else:
                 raise ValueError("Unknown criterion `%s`" % criterion)
             
-            if self.use_rus:
+            # RUS should only be applied to training set, since calculation of valid_bce depends on this method and it should not be affected by RUS.
+            if self.use_rus and self.training:
                 torch.random.manual_seed(self.rus_seed)
                 random_tensor = torch.rand(loss.shape, device=self.device)
                 cost_mask = ((target['label'] == 1) + (random_tensor < self.undersample_rate))
