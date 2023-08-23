@@ -121,6 +121,7 @@ class NodePropertyPrediction(tasks.Task, core.Configurable):
             threshold = self.threshold
         metric = {}
         _target = target["label"]
+        # mask should be all true for evaluation
         _labeled = ~torch.isnan(_target) & target["mask"]
         _size = functional.variadic_sum(_labeled.long(), target["size"]) .view(-1)
         

@@ -139,13 +139,21 @@ class ATPBind3D(data.ProteinDataset):
         self.rus_seed = None
         
 
-    def initialize_rus(self, rus_seed, rus_rate, rus_by):
+    def initialize_rus(self, rus_seed=None, rus_rate=0.05, rus_by='residue'):
+        if rus_seed is None:
+            print('Initialize RUS: None')
+            return self
         print('Initialize RUS: seed %d, rate %.2f, by %s' % (rus_seed, rus_rate, rus_by))
         self.rus_seed = rus_seed
         self.rus_rate = rus_rate
         np.random.seed(self.rus_seed)
         self.protein_sampled = np.random.rand(self.train_sample_count) < self.rus_rate
-        self.residue_sampled = np.random.rand(self.train_sample_count, 350) < self.rus_rate
+        self.residue_sampled = []
+
+        np.random.seed(self.rus_seed)
+        fixed = np.random.rand(5000)
+        for i in range(self.train_sample_count):
+            self.residue_sampled.append(fixed[:len(self.targets['binding'][i])] < self.rus_rate)
         if rus_by not in ['protein', 'residue']:
             raise NotImplementedError
         self.rus_by = rus_by
@@ -197,10 +205,12 @@ class ATPBind3D(data.ProteinDataset):
                 mask = torch.tensor(self.targets['binding'][index]) == 1
         elif self.rus_by == 'residue':
             # use all of positive samples, and randomly sample negative samples
-            mask = (torch.tensor(self.targets['binding'][index]) == 1) + self.redisue_sampled[index][:len(self.targets['binding'][index])]
+            positive_mask = torch.tensor(self.targets['binding'][index]) == 1
+            negative_mask = self.residue_sampled[index]
+            mask = positive_mask + negative_mask
         else:
             raise NotImplementedError
-        return mask
+        return mask.bool()
 
     def get_item(self, index):
         if self.lazy:

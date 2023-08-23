@@ -25,10 +25,11 @@ def run_exp_pure(bert_freeze_layer,
                  lr,
                  batch_size,
                  patience,
-                 rus_seed,
-                 rus_rate,
-                 rus_by,
                  lr_half_epoch,
+                 seed,
+                 rus_rate=0.05,
+                 rus_by='residue',
+                 use_rus=True,
                  ):
     pipeline = Pipeline(
         model='lm-gearnet',
@@ -45,10 +46,10 @@ def run_exp_pure(bert_freeze_layer,
             'lr': lr,
         },
         rus_kwargs={
-            'rus_seed': rus_seed,
+            'rus_seed': seed,
             'rus_rate': rus_rate,
             'rus_by': rus_by,
-        },
+        } if use_rus else {},
         batch_size=batch_size,
         optimizer='adam',
     )
@@ -112,8 +113,7 @@ parameter_by_version = {
     1: {
         'lr': 4e-4,
         'lr_half_epoch': 12,
-        'rus_rate': 0.05,
-        'rus_by': 'protein',
+        'use_rus': False,
         'pretrained_weight_key': 'rtp_57268',
     }
 }
@@ -123,8 +123,8 @@ def main(param_version, seed_start, seed_end):
     for seed in range(seed_start, seed_end):
         print(f'Start {seed} at {pd.Timestamp.now()}')
         patience = 10
-        parameters = {**base_param, **parameter_by_version[param_version], 'rus_seed': seed}
-        print({**parameter_by_version[param_version], 'rus_seed': seed})
+        parameters = {**base_param, **parameter_by_version[param_version], 'seed': seed}
+        print({**parameter_by_version[param_version], 'seed': seed})
         result, state_dict, pipeline = run_exp_pure(**parameters)
         max_valid_mcc_row = result[-1-patience]
         new_row = pd.DataFrame.from_dict(
@@ -134,7 +134,7 @@ def main(param_version, seed_start, seed_end):
         df.to_csv(CSV_PATH, index=False)
         
         # save model
-        early_stop_metric_name = parameters['early_stop_metric']
+        early_stop_metric_name = 'valid_mcc'
 
         early_stop_metric = max_valid_mcc_row[early_stop_metric_name]
         csv_prefix = f'v{param_version:03d}_{seed}_{early_stop_metric:.4f}'
