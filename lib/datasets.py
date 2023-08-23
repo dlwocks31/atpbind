@@ -3,6 +3,7 @@ from torch.utils import data as torch_data
 from torchdrug import data
 import os
 from collections import defaultdict
+import numpy as np
 
 
 class ATPBind(data.ProteinDataset):
@@ -120,11 +121,12 @@ class ATPBind3D(data.ProteinDataset):
                  '4TU0A',
                  ]
 
-    def __init__(self, path=None, limit=-1, valid_ratio=0.1, **kwargs):
+    fold_count = 5
+    
+    def __init__(self, path=None, limit=-1, **kwargs):
         if path is None:
             path = os.path.dirname(__file__)
         self.num_samples = []
-        self.valid_ratio = valid_ratio
         _, targets, pdb_ids = self.get_seq_target(path, limit)
         pdb_files = [os.path.join(path, '../data/pdb/%s.pdb' % pdb_id)
                      for pdb_id in pdb_ids if pdb_id not in self.deny_list]
@@ -132,6 +134,7 @@ class ATPBind3D(data.ProteinDataset):
         self.load_pdbs(pdb_files, **kwargs)
         self.targets = defaultdict(list)
         self.targets["binding"] = targets["binding"]
+        
 
     def get_seq_target(self, path, limit):
         sequences, targets, pdb_ids = [], [], []
@@ -151,14 +154,12 @@ class ATPBind3D(data.ProteinDataset):
             targets += filtered_tgt
             pdb_ids += filtered_ids
 
-            self.num_samples.append(len(filtered_seq))
-
-        # calculate set lengths
-        total_samples = sum(self.num_samples)
-        val_num = int(total_samples*self.valid_ratio)
-        self.num_samples = [self.num_samples[0] -
-                            val_num, val_num, self.num_samples[1]]
-        print('Split num: ', self.num_samples)
+            if file == 'train.txt':
+                self.train_sample_count = len(filtered_seq)
+            elif file == 'test.txt':
+                self.test_sample_count = len(filtered_seq)
+            else:
+                raise NotImplementedError
 
         targets_ = {"binding": targets}
         return sequences, targets_, pdb_ids
@@ -181,14 +182,19 @@ class ATPBind3D(data.ProteinDataset):
             item = self.transform(item)
         return item
 
-    def split(self, keys=None):
-        keys = keys or self.splits
-        offset = 0
-        splits = []
-        for split_name, num_sample in zip(self.splits, self.num_samples):
-            if split_name in keys:
-                split = torch_data.Subset(
-                    self, range(offset, offset + num_sample))
-                splits.append(split)
-            offset += num_sample
+    def split(self, valid_fold_num=0):
+        assert(valid_fold_num < self.fold_count and valid_fold_num >= 0)
+        
+        fold_ranges = np.array_split(np.arange(self.train_sample_count), self.fold_count)
+        
+        splits = [
+            torch_data.Subset(self, to_int_list(
+                np.concatenate(fold_ranges[:valid_fold_num] + fold_ranges[valid_fold_num+1:])
+            )), # test
+            torch_data.Subset(self, to_int_list(fold_ranges[valid_fold_num])), # valid
+            torch_data.Subset(self, list(range(self.train_sample_count, self.train_sample_count + self.test_sample_count))), # test
+        ]
         return splits
+
+def to_int_list(np_arr):
+    return [int(i) for i in np_arr]

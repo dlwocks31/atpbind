@@ -25,34 +25,15 @@ class DisableLogger():
 @cache
 def get_dataset(dataset):
     print(f'get dataset {dataset}')
-    if dataset == 'atpbind':
+    if dataset == 'atpbind3d' or dataset == 'atpbind3d-minimal':
         truncuate_transform = transforms.TruncateProtein(max_length=350, random=False)
         protein_view_transform = transforms.ProteinView(view='residue')
         transform = transforms.Compose([truncuate_transform, protein_view_transform])
 
-        dataset = ATPBind(atom_feature=None, bond_feature=None,
-                        residue_feature="default", transform=transform)
-
-        train_set, valid_set, test_set = dataset.split()
-        print("train samples: %d, valid samples: %d, test samples: %d" %
-            (len(train_set), len(valid_set), len(test_set)))
-        
-        return train_set, valid_set, test_set
-    elif dataset == 'atpbind3d' or dataset == 'atpbind3d-minimal':
-        truncuate_transform = transforms.TruncateProtein(max_length=350, random=False)
-        protein_view_transform = transforms.ProteinView(view='residue')
-        transform = transforms.Compose([truncuate_transform, protein_view_transform])
-
-        if dataset == 'atpbind3d':
-            dataset = ATPBind3D(transform=transform)
-        elif dataset == 'atpbind3d-minimal':
-            dataset = ATPBind3D(transform=transform, limit=5)
-
-        train_set, valid_set, test_set = dataset.split()
-        print("train samples: %d, valid samples: %d, test samples: %d" %
-              (len(train_set), len(valid_set), len(test_set)))
-        
-        return train_set, valid_set, test_set
+        limit = -1 if dataset == 'atpbind3d' else 5
+        return ATPBind3D(transform=transform, limit=limit)
+    elif dataset == 'atpbind':
+        raise NotImplementedError('atpbind dataset dropped')
 
 METRICS_USING = ("sensitivity", "specificity", "accuracy", "precision", "mcc", "micro_auroc",)
 class Pipeline:
@@ -75,6 +56,7 @@ class Pipeline:
                  bce_weight=1,
                  verbose=False,
                  optimizer='adam',
+                 valid_fold_num=0,
                  ):
         self.gpus = gpus
 
@@ -94,7 +76,9 @@ class Pipeline:
             elif model == 'cnn':
                 self.model = models.ProteinCNN(**model_kwargs)
         
-        self.train_set, self.valid_set, self.test_set = get_dataset(dataset)
+        self.train_set, self.valid_set, self.test_set = get_dataset(dataset).split(valid_fold_num=valid_fold_num)
+        print("train samples: %d, valid samples: %d, test samples: %d" %
+              (len(self.train_set), len(self.valid_set), len(self.test_set)))
         
         if dataset == 'atpbind':
             self.task = NodePropertyPrediction(
@@ -143,6 +127,8 @@ class Pipeline:
 
         if not optimizer in ['adam', 'adamw']:
             raise ValueError('Optimizer must be one of {}'.format(['adam', 'adamw']))
+        # it does't matter whether we use self.task or self.model.parameters(), since mlp is added at preprocess time
+        # and mlp parameters is then added to optimizer
         if optimizer == 'adam':
             optimizer = torch.optim.Adam(self.model.parameters(), **optimizer_kwargs)
         elif optimizer == 'adamw':
@@ -156,7 +142,7 @@ class Pipeline:
                                         optimizer,
                                         batch_size=batch_size,
                                         log_interval=1000000000,
-                                        gpus=gpus
+                                        gpus=gpus,
             )
         
         self.verbose = verbose
