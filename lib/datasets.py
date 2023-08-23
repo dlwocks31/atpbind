@@ -134,6 +134,23 @@ class ATPBind3D(data.ProteinDataset):
         self.load_pdbs(pdb_files, **kwargs)
         self.targets = defaultdict(list)
         self.targets["binding"] = targets["binding"]
+
+        self.fold_ranges = np.array_split(np.arange(self.train_sample_count), self.fold_count)
+        self.rus_seed = None
+        
+
+    def initialize_rus(self, rus_seed, rus_rate, rus_by):
+        print('Initialize RUS: seed %d, rate %.2f, by %s' % (rus_seed, rus_rate, rus_by))
+        self.rus_seed = rus_seed
+        self.rus_rate = rus_rate
+        np.random.seed(self.rus_seed)
+        self.protein_sampled = np.random.rand(self.train_sample_count) < self.rus_rate
+        self.residue_sampled = np.random.rand(self.train_sample_count, 350) < self.rus_rate
+        if rus_by not in ['protein', 'residue']:
+            raise NotImplementedError
+        self.rus_by = rus_by
+
+        return self
         
 
     def get_seq_target(self, path, limit):
@@ -164,6 +181,27 @@ class ATPBind3D(data.ProteinDataset):
         targets_ = {"binding": targets}
         return sequences, targets_, pdb_ids
 
+
+    def _is_train_set(self, index):
+        return index < self.train_sample_count and index not in self.fold_ranges[self.valid_fold_num]
+
+    def _generate_mask(self, index):
+        if not self._is_train_set(index) or self.rus_seed is None:
+            # if not train set, do not mask!
+            return torch.ones(len(self.targets["binding"][index])).bool()
+
+        if self.rus_by == 'protein':
+            if self.protein_sampled[index]: # within the undersample rate, use all of positive and negative samples
+                mask = torch.ones(len(self.targets["binding"][index])).bool()
+            else: # not within the undersample rate, use all of positive samples, and none of negative samples
+                mask = torch.tensor(self.targets['binding'][index]) == 1
+        elif self.rus_by == 'residue':
+            # use all of positive samples, and randomly sample negative samples
+            mask = (torch.tensor(self.targets['binding'][index]) == 1) + self.redisue_sampled[index][:len(self.targets['binding'][index])]
+        else:
+            raise NotImplementedError
+        return mask
+
     def get_item(self, index):
         if self.lazy:
             graph = data.Protein.from_sequence(
@@ -174,8 +212,7 @@ class ATPBind3D(data.ProteinDataset):
             target = torch.as_tensor(
                 self.targets["binding"][index], dtype=torch.long).view(-1, 1)
             graph.target = target
-            mask = torch.ones_like(target).bool()
-            graph.mask = mask
+            graph.mask = self._generate_mask(index).view(-1, 1)
         graph.view = 'residue'
         item = {"graph": graph}
         if self.transform:
@@ -184,14 +221,14 @@ class ATPBind3D(data.ProteinDataset):
 
     def split(self, valid_fold_num=0):
         assert(valid_fold_num < self.fold_count and valid_fold_num >= 0)
-        
-        fold_ranges = np.array_split(np.arange(self.train_sample_count), self.fold_count)
-        
+
+        self.valid_fold_num = valid_fold_num
+
         splits = [
             torch_data.Subset(self, to_int_list(
-                np.concatenate(fold_ranges[:valid_fold_num] + fold_ranges[valid_fold_num+1:])
+                np.concatenate(self.fold_ranges[:valid_fold_num] + self.fold_ranges[valid_fold_num+1:])
             )), # test
-            torch_data.Subset(self, to_int_list(fold_ranges[valid_fold_num])), # valid
+            torch_data.Subset(self, to_int_list(self.fold_ranges[valid_fold_num])), # valid
             torch_data.Subset(self, list(range(self.train_sample_count, self.train_sample_count + self.test_sample_count))), # test
         ]
         return splits

@@ -49,6 +49,7 @@ class Pipeline:
                  model_kwargs={},
                  optimizer_kwargs={},
                  task_kwargs={},
+                 rus_kwargs={},
                  graph_knn_k=10,
                  graph_spatial_radius=10.0,
                  graph_sequential_max_distance=2,
@@ -76,7 +77,7 @@ class Pipeline:
             elif model == 'cnn':
                 self.model = models.ProteinCNN(**model_kwargs)
         
-        self.train_set, self.valid_set, self.test_set = get_dataset(dataset).split(valid_fold_num=valid_fold_num)
+        self.train_set, self.valid_set, self.test_set = get_dataset(dataset).initialize_rus(**rus_kwargs).split(valid_fold_num=valid_fold_num)
         print("train samples: %d, valid samples: %d, test samples: %d" %
               (len(self.train_set), len(self.valid_set), len(self.test_set)))
         

@@ -19,9 +19,6 @@ class NodePropertyPrediction(tasks.Task, core.Configurable):
                  graph_construction_model=None,
                  threshold=-1.5,
                  bce_weight=1.0,
-                 use_rus=False,
-                 rus_seed=0,
-                 undersample_rate=0.1,
                  ):
         super(NodePropertyPrediction, self).__init__()
         self.model = model
@@ -35,9 +32,6 @@ class NodePropertyPrediction(tasks.Task, core.Configurable):
         self.graph_construction_model = graph_construction_model
         self.threshold = threshold
         self.bce_weight = bce_weight
-        self.use_rus = use_rus
-        self.rus_seed = rus_seed
-        self.undersample_rate = undersample_rate
 
     def preprocess(self, train_set, valid_set, test_set):
         """
@@ -112,13 +106,6 @@ class NodePropertyPrediction(tasks.Task, core.Configurable):
                 loss = F.cross_entropy(pred, target["label"], reduction="none")
             else:
                 raise ValueError("Unknown criterion `%s`" % criterion)
-            
-            # RUS should only be applied to training set, since calculation of valid_bce depends on this method and it should not be affected by RUS.
-            if self.use_rus and self.training:
-                torch.random.manual_seed(self.rus_seed)
-                random_tensor = torch.rand(loss.shape, device=self.device)
-                cost_mask = ((target['label'] == 1) + (random_tensor < self.undersample_rate))
-                loss = loss * cost_mask.float()
             loss = functional.masked_mean(loss, labeled, dim=0)
 
             name = tasks._get_criterion_name(criterion)
