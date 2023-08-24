@@ -1,6 +1,6 @@
 from collections import OrderedDict
 from torch import Tensor
-from transformers import BertModel, BertTokenizer
+from transformers import BertModel, BertTokenizer, AutoTokenizer, EsmModel
 import torch
 from torchdrug import core, models
 
@@ -42,20 +42,26 @@ def separate_alphabets(text):
     return separated_text.strip()
 
 
+lm_type_map = {
+    'bert': (BertModel, BertTokenizer, "Rostlab/prot_bert"),
+    'esm-t33': (EsmModel, AutoTokenizer, "facebook/esm2_t33_650M_UR50D"),
+}
 class LMGearNetModel(torch.nn.Module, core.Configurable):
-    def __init__(self, gpu, gearnet_hidden_dim_size=512, gearnet_hidden_dim_count=6, bert_freeze=True, bert_freeze_layer_count=-1, graph_sequential_max_distance=2):
+    def __init__(self, 
+                 gpu,
+                 lm_type='bert',
+                 gearnet_hidden_dim_size=512,
+                 gearnet_hidden_dim_count=6,
+    ):
         super().__init__()
-        self.bert_tokenizer = BertTokenizer.from_pretrained(
-            "Rostlab/prot_bert", do_lower_case=False)
-        self.bert_model = BertModel.from_pretrained(
-            "Rostlab/prot_bert").to(f'cuda:{gpu}')
-        _freeze_bert(self.bert_model, freeze_bert=bert_freeze,
-                     freeze_layer_count=bert_freeze_layer_count)
+        Model, Tokenizer, pretrained_model_name = lm_type_map[lm_type]
+        self.tokenizer = Tokenizer.from_pretrained(pretrained_model_name, do_lower_case=False)
+        self.lm = Model.from_pretrained(pretrained_model_name).to(f'cuda:{gpu}')
         self.gearnet = models.GearNet(
-            input_dim=1024,  # self.bert_model.config.hidden_size,
+            input_dim=self.lm.config.hidden_size,
             hidden_dims=[gearnet_hidden_dim_size] * gearnet_hidden_dim_count,
-            num_relation=7 + (graph_sequential_max_distance - 2) * 2,
-            edge_input_dim=59 + (graph_sequential_max_distance - 2) * 2,
+            num_relation=7,
+            edge_input_dim=59,
             num_angle_bin=8,
             batch_norm=True,
             concat_hidden=True,
@@ -73,9 +79,8 @@ class LMGearNetModel(torch.nn.Module, core.Configurable):
         input_len = [len(seq.replace(' ', '')) for seq in input]
 
         # At large batch size, tokenization becomes the bottleneck
-        encoded_input = self.bert_tokenizer(
-            input, return_tensors='pt', padding=True).to('cuda')
-        embedding_rpr = self.bert_model(**encoded_input)
+        encoded_input = self.tokenizer(input, return_tensors='pt', padding=True).to(f'cuda:{self.gpu}')
+        embedding_rpr = self.lm(**encoded_input)
         
         lm_residue_feature = []
         for i, emb in enumerate(embedding_rpr.last_hidden_state):
@@ -87,6 +92,22 @@ class LMGearNetModel(torch.nn.Module, core.Configurable):
         # print(f'lm_output shape: {lm_output.shape}')
         gearnet_output = self.gearnet(graph, lm_output)
         return gearnet_output
+    
+    def freeze_lm(self, freeze_all=True, freeze_layer_count=None):
+        if freeze_all:
+            # freeze the entire bert model
+            for param in self.lm.parameters():
+                param.requires_grad = False
+        else:
+            # freeze the embeddings
+            for param in self.lm.embeddings.parameters():
+                param.requires_grad = False
+            if freeze_layer_count != -1:
+                # freeze layers in bert_model.encoder
+                for layer in self.lm.encoder.layer[:freeze_layer_count]:
+                    for param in layer.parameters():
+                        param.requires_grad = False
+        
     
     def freeze_gearnet(self, freeze_all=False, freeze_layer_count=0):
         if freeze_all:

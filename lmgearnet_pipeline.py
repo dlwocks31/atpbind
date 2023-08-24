@@ -1,67 +1,56 @@
-import json
 from lib.pipeline import Pipeline
-from lib.disable_logger import DisableLogger
+import pandas as pd
 
 DATA_FILE_PATH = 'lmgearnet_pipeline.json'
-GPU = 2
+GPU = 0
 
-def exp_record_exists(data, parameters):
-    for record in data:
-        if all(record[k] == v for k, v in parameters.items()):
-            return True
-    return False
-
-def run_exp(data, gearnet_hidden_dim_count, bert_unfreeze_layer, trial):
-    parameters = {
-        "gearnet_hidden_dim_count": gearnet_hidden_dim_count,
-        "bert_unfreeze_layer": bert_unfreeze_layer,
-        "trial": trial
-    }
-    # check if the experiment has been run
-    if exp_record_exists(data, parameters):
-        print(f'Experiment {parameters} has been run, skip')
-        return
-    
+def run_exp_pure(lm_train_layer, patience):
+    lm_type, total_layer = 'esm-t33', 33
     pipeline = Pipeline(
         model='lm-gearnet',
         dataset='atpbind3d',
         gpus=[GPU],
         model_kwargs={
             'gpu': GPU,
+            'lm_type': lm_type,
             'gearnet_hidden_dim_size': 512,
-            'gearnet_hidden_dim_count': gearnet_hidden_dim_count,
-            'bert_freeze': bert_unfreeze_layer == 0,
-            'bert_freeze_layer_count': 30 - bert_unfreeze_layer,
-    })
+            'gearnet_hidden_dim_count': 4,
+        },
+        batch_size=8,
+    )
     
-    for epoch in range(5):
-        with DisableLogger():
-            pipeline.train(num_epoch=1)
-            data.append(parameters | {
-                "epoch": epoch,
-                "data": pipeline.evaluate()
-            })
-        print(data[-1])
-    
-    data.sort(key=lambda x: (x["bert_unfreeze_layer"],
-              x["gearnet_hidden_dim_count"], x["trial"], x["epoch"]))
-    with open(DATA_FILE_PATH, 'w') as f:
-        json.dump(data, f)
-    
+    pipeline.model.freeze_lm(
+        freeze_all=lm_train_layer == 0,
+        freeze_layer_count=total_layer - lm_train_layer
+    )
+
+    train_record = pipeline.train_until_fit(patience=patience)
+    return train_record
 
 
-def main():
+def read_initial_csv(path):
     try:
-        with open(DATA_FILE_PATH, 'r') as f:
-            data = json.load(f)
+        return pd.read_csv(path)
     except (FileNotFoundError, IndexError):
         # File does not exist, or it is empty
-        data = []
+        return pd.DataFrame()
 
-    for gearnet_hidden_dim_count in range(3, 8):
-        for bert_unfreeze_layer in range(2):
-            for trial in range(3):
-                run_exp(data, gearnet_hidden_dim_count, bert_unfreeze_layer, trial)
+def main():
+    CSV_PATH = 'lmgearnet_pipeline.csv'
+    df = read_initial_csv(CSV_PATH)
+
+    for trial in range(10):
+        for train_layer in [1, 2, 3]:
+            patience = 5
+            parameters = {
+                "lm_train_layer": train_layer,
+                "patience": patience,
+            }
+            print(pd.Timestamp.now(), parameters)
+            result = run_exp_pure(**parameters)
+            new_row = pd.DataFrame.from_dict([{**parameters, **result[-1-patience], 'epoch_count': len(result)}])
+            df = pd.concat([df, new_row])
+            df.to_csv(CSV_PATH, index=False)
 
 if __name__ == '__main__':
     main()

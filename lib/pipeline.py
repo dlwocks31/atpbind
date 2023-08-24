@@ -9,6 +9,7 @@ import contextlib
 import logging
 import numpy as np
 from functools import cache
+from datetime import datetime, timedelta
 
 from .tasks import NodePropertyPrediction, MeanEnsembleNodePropertyPrediction
 from .datasets import ATPBind, ATPBind3D
@@ -21,6 +22,12 @@ class DisableLogger():
        logging.disable(logging.CRITICAL)
     def __exit__(self, exit_type, exit_value, exit_traceback):
        logging.disable(logging.NOTSET)
+
+def format_timedelta(td: timedelta) -> str:
+    total_seconds = int(td.total_seconds())
+    minutes, seconds = divmod(total_seconds, 60)
+    
+    return f"{minutes}m{seconds}s"
 
 @cache
 def get_dataset(dataset):
@@ -50,9 +57,6 @@ class Pipeline:
                  optimizer_kwargs={},
                  task_kwargs={},
                  rus_kwargs={},
-                 graph_knn_k=10,
-                 graph_spatial_radius=10.0,
-                 graph_sequential_max_distance=2,
                  batch_size=1,
                  bce_weight=1,
                  verbose=False,
@@ -71,9 +75,9 @@ class Pipeline:
             if model == 'bert':
                 self.model = BertWrapModel(**model_kwargs)
             elif model == 'gearnet':
-                self.model = GearNetWrapModel(graph_sequential_max_distance=graph_sequential_max_distance, **model_kwargs)
+                self.model = GearNetWrapModel(**model_kwargs)
             elif model == 'lm-gearnet':
-                self.model = LMGearNetModel(graph_sequential_max_distance=graph_sequential_max_distance, **model_kwargs)
+                self.model = LMGearNetModel(**model_kwargs)
             elif model == 'cnn':
                 self.model = models.ProteinCNN(**model_kwargs)
             elif model == 'esm-t33' or model == 'esm-t36' or model == 'esm-t48':
@@ -94,9 +98,9 @@ class Pipeline:
             )
         elif dataset == 'atpbind3d' or dataset == 'atpbind3d-minimal':
             edge_layers = [
-                geometry.SpatialEdge(radius=graph_spatial_radius, min_distance=5),
-                geometry.KNNEdge(k=graph_knn_k, min_distance=5),
-                geometry.SequentialEdge(max_distance=graph_sequential_max_distance),
+                geometry.SpatialEdge(radius=10.0, min_distance=5),
+                geometry.KNNEdge(k=10, min_distance=5),
+                geometry.SequentialEdge(max_distance=2),
             ]
                 
             graph_construction_model = layers.GraphConstruction(
@@ -162,10 +166,13 @@ class Pipeline:
         best_state_dict = None
         best_metric = -1 if early_stop_metric == 'valid_mcc' else 1e10
         
+        last_time = datetime.now()
         for epoch in count(start=1):
             cm = contextlib.nullcontext() if self.verbose else DisableLogger()
             with cm:
                 self.train(num_epoch=1)
+                
+                # record
                 cur_result = self.evaluate()
                 cur_result['train_bce'] = self.get_last_bce()
                 cur_result['valid_bce'] = self.calculate_valid_loss()
@@ -174,7 +181,13 @@ class Pipeline:
                 )['best_mcc']
                 cur_result = round_dict(cur_result, 4)
                 train_record.append(cur_result)
-                print(cur_result)
+                
+                # logging
+                cur_time = datetime.now()
+                print(f'{format_timedelta(cur_time - last_time)} {cur_result}')
+                last_time = cur_time
+                
+                # early stop
                 should_replace_best_metric = cur_result['valid_mcc'] > best_metric if early_stop_metric == 'valid_mcc' else cur_result['valid_bce'] < best_metric
                 if return_state_dict and should_replace_best_metric:
                     best_metric = cur_result[early_stop_metric]

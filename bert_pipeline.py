@@ -6,25 +6,20 @@ DATA_FILE_PATH = 'bert_pipeline.json'
 
 GPU = 1
 
-def exp_record_exists(data, parameters):
-    for record in data:
-        if all(record[k] == v for k, v in parameters.items()):
-            return True
-    return False
-
-def run_exp_pure(train_layer):
+def run_exp_pure(model, train_layer, total_layer, patience=5):
     pipeline = Pipeline(
-        model='bert',
-        dataset='atpbind',
+        model=model,
+        dataset='atpbind3d',
         gpus=[GPU],
         model_kwargs={
-            'freeze_bert': train_layer == 0,
-            'freeze_layer_count': 30 - train_layer,
+            'gpu': GPU,
+            'freeze_esm': train_layer == 0,
+            'freeze_layer_count': total_layer - train_layer,
         },
-        batch_size=8,
-        )
+        batch_size=16,
+    )
 
-    train_record = pipeline.train_until_fit(patience=3)
+    train_record = pipeline.train_until_fit(patience=patience)
     return train_record
 
 
@@ -39,16 +34,22 @@ def main():
     CSV_PATH = 'bert_pipeline.csv'
     df = read_initial_csv(CSV_PATH)
 
-    for trial in range(3):
-        for train_layer in range(0, 5):
-            parameters = {
-                "train_layer": train_layer,
-            }
-            print(parameters)
-            result = run_exp_pure(**parameters)
-            new_row = pd.DataFrame.from_dict([{**parameters, **result[-4]}])
-            df = pd.concat([df, new_row])
-            df.to_csv(CSV_PATH, index=False)
+    for trial in range(10):
+        for model, total_layer in [('esm-t33', 33), ('esm-t36', 36)]:
+            for train_layer in [3, 3]:
+                patience = 5
+                parameters = {
+                    "total_layer": total_layer,
+                    "train_layer": train_layer,
+                    "patience": patience,
+                }
+                print(pd.Timestamp.now(), parameters)
+                result = run_exp_pure(model=model, **parameters)
+                new_row = pd.DataFrame.from_dict([{**parameters, **result[-1-patience]}])
+                df = pd.concat([df, new_row])
+                df.to_csv(CSV_PATH, index=False)
+                if total_layer == 33:
+                    break
 
 if __name__ == '__main__':
     main()
