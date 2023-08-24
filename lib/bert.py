@@ -35,12 +35,12 @@ def _freeze_bert(
 
 # Cusom model Wrapping BERT: check https://torchdrug.ai/docs/notes/model.html
 class BertWrapModel(torch.nn.Module, core.Configurable):
-    def __init__(self, freeze_bert, freeze_layer_count):
+    def __init__(self, gpu, freeze_bert, freeze_layer_count):
         super().__init__()
         self.bert_tokenizer = BertTokenizer.from_pretrained(
             "Rostlab/prot_bert", do_lower_case=False)
         self.bert_model = BertModel.from_pretrained(
-            "Rostlab/prot_bert").to('cuda')
+            "Rostlab/prot_bert").to(f'cuda:{GPU}')
         _freeze_bert(self.bert_model, 
                      freeze_bert=freeze_bert,
                      freeze_layer_count=freeze_layer_count)
@@ -67,10 +67,16 @@ class BertWrapModel(torch.nn.Module, core.Configurable):
 
 
 class EsmWrapModel(torch.nn.Module, core.Configurable):
-    def __init__(self, freeze_esm, freeze_layer_count):
+    def __init__(self, model_type, gpu, freeze_esm, freeze_layer_count):
         super().__init__()
-        self.esm_tokenizer = AutoTokenizer.from_pretrained("facebook/esm2_t33_650M_UR50D")
-        self.esm_model = EsmModel.from_pretrained("facebook/esm2_t33_650M_UR50D").to('cuda')
+        if model_type == 'esm-t33':
+            name = "facebook/esm2_t33_650M_UR50D"
+        elif model_type == 'esm-t36':
+            name = "facebook/esm2_t36_3B_UR50D"
+        elif model_type == 'esm-t48':
+            name = "facebook/esm2_t48_15B_UR50D"
+        self.esm_tokenizer = AutoTokenizer.from_pretrained(name)
+        self.esm_model = EsmModel.from_pretrained(name).to(f'cuda:{gpu}')
         _freeze_bert(self.esm_model,
                      freeze_bert=freeze_esm,
                      freeze_layer_count=freeze_layer_count)
