@@ -43,6 +43,7 @@ def parse_args():
                         help="Learning rate")
     parser.add_argument("--dataset", type=str, default="ec",
                         help="Dataset to use")
+    parser.add_argument("--task", type=str, default="rtp")
     return parser.parse_args()
 
 def get_last_ce(meter):
@@ -78,13 +79,19 @@ def main():
                                 graph_sequential_max_distance=args.sequential_max_distance,
                                 )
 
-    task = CustomAttributeMasking(lm_gearnet, graph_construction_model=graph_construction_model,
-                                  mask_rate=0.15, num_mlp_layer=2)
+    if args.task == 'rtp':
+        task = CustomAttributeMasking(lm_gearnet, graph_construction_model=graph_construction_model,
+                                    mask_rate=0.15, num_mlp_layer=2)
+    elif args.task == 'mvcl':
+        model = models.MultiviewContrast(lm_gearnet, noise_funcs=[geometry.IdentityNode(), geometry.RandomEdgeMask(mask_rate=0.15)],
+                                        crop_funcs=[geometry.SubsequenceNode(max_length=50), 
+                                                    geometry.SubspaceNode(entity_level="residue", min_neighbor=15, min_radius=15.0)], num_mlp_layer=2)
+        task = tasks.Unsupervised(model, graph_construction_model=graph_construction_model)
 
     optimizer = torch.optim.AdamW(task.parameters(), lr=args.lr, weight_decay=1e-4)
-    T_0 = 20
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0, eta_min=1e-6)
-    
+    # T_0 = 20
+    # scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0, eta_min=1e-6)
+    scheduler = None
     
     # Load dataset
     print('Load Dataset')
@@ -126,11 +133,14 @@ def main():
             print("RuntimeError occurred. Continue training")
             sleep(60)
 
-        validate_and_save(solver, lm_gearnet, args, epoch, cur_lr=scheduler.get_last_lr()[0])
+        if args.task == 'rtp':
+            validate_and_save(solver, lm_gearnet, args, epoch, cur_lr=scheduler.get_last_lr()[0])
+        elif args.task == 'mvcl':
+            torch.save(lm_gearnet.state_dict(), "mvcl.pth")
 
 
 def validate_and_save(solver, lm_gearnet, args, epoch, cur_lr):
-    CSV_FILE = f"pretrain_lmg_{args.hidden_dim_count}.csv"
+    CSV_FILE = f"pretrain_lmg_{args.task}_{args.hidden_dim_count}.csv"
     fail_cnt = 0
     while True:
         try:
