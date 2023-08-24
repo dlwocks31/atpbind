@@ -12,7 +12,7 @@ from functools import cache
 
 from .tasks import NodePropertyPrediction, MeanEnsembleNodePropertyPrediction
 from .datasets import ATPBind, ATPBind3D
-from .bert import BertWrapModel
+from .bert import BertWrapModel, EsmWrapModel
 from .custom_models import GearNetWrapModel, LMGearNetModel
 from .utils import dict_tensor_to_num, round_dict
 
@@ -37,7 +37,7 @@ def get_dataset(dataset):
 
 METRICS_USING = ("sensitivity", "specificity", "accuracy", "precision", "mcc", "micro_auroc",)
 class Pipeline:
-    possible_models = ['bert', 'gearnet', 'lm-gearnet', 'cnn']
+    possible_models = ['bert', 'gearnet', 'lm-gearnet', 'cnn', 'esm']
     possible_datasets = ['atpbind', 'atpbind3d', 'atpbind3d-minimal']
     threshold = 0
     
@@ -76,6 +76,8 @@ class Pipeline:
                 self.model = LMGearNetModel(graph_sequential_max_distance=graph_sequential_max_distance, **model_kwargs)
             elif model == 'cnn':
                 self.model = models.ProteinCNN(**model_kwargs)
+            elif model == 'esm':
+                self.model = EsmWrapModel(**model_kwargs)
         
         self.train_set, self.valid_set, self.test_set = get_dataset(dataset).initialize_rus(**rus_kwargs).split(valid_fold_num=valid_fold_num)
         print("train samples: %d, valid samples: %d, test samples: %d" %

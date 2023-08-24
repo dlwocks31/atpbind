@@ -1,6 +1,6 @@
 # freeze_bert in https://github.com/aws-samples/lm-gvp/blob/0b7a6d96486e2ee222929917570432296554cfe7/lmgvp/modules.py#L47
 
-from transformers import BertModel, BertTokenizer
+from transformers import BertModel, BertTokenizer, AutoTokenizer, EsmModel
 from torchdrug import core
 import torch
 
@@ -55,6 +55,36 @@ class BertWrapModel(torch.nn.Module, core.Configurable):
         encoded_input = self.bert_tokenizer(
             input, return_tensors='pt', padding=True).to('cuda')
         embedding_rpr = self.bert_model(**encoded_input)
+        
+        residue_feature = []
+        for i, emb in enumerate(embedding_rpr.last_hidden_state):
+            # skip residue feature for [CLS] and [SEP], since they are not in the original sequence
+            residue_feature.append(emb[1:1+input_len[i]])
+        
+        x = torch.cat(residue_feature)
+
+        return {"residue_feature": x}
+
+
+class EsmWrapModel(torch.nn.Module, core.Configurable):
+    def __init__(self, freeze_esm, freeze_layer_count):
+        super().__init__()
+        self.esm_tokenizer = AutoTokenizer.from_pretrained("facebook/esm2_t33_650M_UR50D")
+        self.esm_model = EsmModel.from_pretrained("facebook/esm2_t33_650M_UR50D").to('cuda')
+        _freeze_bert(self.esm_model,
+                     freeze_bert=freeze_esm,
+                     freeze_layer_count=freeze_layer_count)
+        self.input_dim = 21
+        self.output_dim = self.esm_model.config.hidden_size
+
+    def forward(self, graph, _, all_loss=None, metric=None):
+        input = [seq.replace('.', ' ') for seq in graph.to_sequence()]
+        input_len = [len(seq.replace(' ', '')) for seq in input]
+
+        # At large batch size, tokenization becomes the bottleneck
+        encoded_input = self.esm_tokenizer(
+            input, return_tensors='pt', padding=True).to('cuda')
+        embedding_rpr = self.esm_model(**encoded_input)
         
         residue_feature = []
         for i, emb in enumerate(embedding_rpr.last_hidden_state):
