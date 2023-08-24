@@ -28,6 +28,7 @@ def run_exp_pure(bert_freeze_layer,
                  patience,
                  lr_half_epoch,
                  seed,
+                 mlp_lr_ratio,
                  rus_rate=0.05,
                  rus_by='residue',
                  rus_noise_rate=0,
@@ -62,7 +63,9 @@ def run_exp_pure(bert_freeze_layer,
         pipeline.model.gearnet.load_state_dict(state_dict)
 
     pipeline.model.freeze_gearnet(freeze_layer_count=gearnet_freeze_layer)
-
+    
+    # Set mlp lr. Assume mlp param group is added in engine, and thus is last one.
+    pipeline.solver.optimizer.param_groups[1]['lr'] = pipeline.solver.optimizer.param_groups[0]['lr'] * mlp_lr_ratio
 
     if lr_half_epoch > 0:
         scheduler = ExponentialLR(gamma=0.5**(1/lr_half_epoch), optimizer=pipeline.solver.optimizer)
@@ -109,44 +112,52 @@ base_param = {
     'pretrained_layers': 4,
     'gearnet_freeze_layer': 0,
     'patience': 10,
-    'batch_size': 8,
+    'mlp_lr_ratio': 1,
+    'lr': 4e-4,
+    'lr_half_epoch': 12,
+    'pretrained_weight_key': 'rtp_57268',
 }
 
 parameter_by_version = {
     1: {
-        'lr': 4e-4,
-        'lr_half_epoch': 12,
         'use_rus': False,
-        'pretrained_weight_key': 'rtp_57268',
     },
     2: {
-        'lr': 4e-4,
-        'lr_half_epoch': 12,
         'rus_rate': 0.05,
         'rus_by': 'residue',
         'rus_noise_rate': 0.5,
-        'pretrained_weight_key': 'rtp_57268',
     },
     3: {
-        'lr': 4e-4,
-        'lr_half_epoch': 12,
         'rus_rate': 0.05,
         'rus_by': 'residue',
         'rus_noise_rate': 0.7,
-        'pretrained_weight_key': 'rtp_57268',
     },
     4: {
-        'lr': 4e-4,
-        'lr_half_epoch': 12,
         'rus_rate': 0.05,
         'rus_by': 'residue',
         'rus_noise_rate': 0.3,
-        'pretrained_weight_key': 'rtp_57268',
+    },
+    5: {
+        'rus_rate': 0.05,
+        'rus_by': 'residue',
+        'rus_noise_rate': 0.9,
+    },
+    6: {
+        'rus_rate': 0.05,
+        'rus_by': 'residue',
+        'rus_noise_rate': 1,
+    },
+    7: {
+        'rus_rate': 0.05,
+        'rus_by': 'residue',
+        'rus_noise_rate': 0.7,
+        'lr': 1e-4,
+        'mlp_lr_ratio': 5.0,
     },
 }
 
 
-def main(param_version, seed_start, seed_end):
+def main(param_version, seed_start, seed_end, batch_size):
     CSV_PATH = 'rus_pipeline_v3.csv'
     LOCK_PATH = 'rus_pipeline_v3.lock'
     def process_safe_append_to_csv(new_row):
@@ -163,7 +174,7 @@ def main(param_version, seed_start, seed_end):
         patience = 10
         parameters = {**base_param, **parameter_by_version[param_version], 'seed': seed}
         print({**parameter_by_version[param_version], 'seed': seed})
-        result, state_dict, pipeline = run_exp_pure(**parameters)
+        result, state_dict, pipeline = run_exp_pure(**parameters, batch_size=batch_size)
         max_valid_mcc_row = result[-1-patience]
         new_row = pd.DataFrame.from_dict(
             [{'param_version': param_version, **max_valid_mcc_row, 'epoch_count': len(result)}])
@@ -192,6 +203,7 @@ if __name__ == '__main__':
     parser.add_argument('--param_version', type=int, default=1)
     parser.add_argument('--seed_start', type=int, default=0)
     parser.add_argument('--seed_end', type=int, default=10)
+    parser.add_argument('--batch_size', type=int, default=8)
     args = parser.parse_args()
     GPU = args.gpu
-    main(param_version=args.param_version, seed_start=args.seed_start, seed_end=args.seed_end)
+    main(param_version=args.param_version, seed_start=args.seed_start, seed_end=args.seed_end, batch_size=args.batch_size)
