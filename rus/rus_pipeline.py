@@ -1,5 +1,6 @@
 import sys
 import os
+from filelock import FileLock
 
 sys.path.insert(0, os.path.abspath('..'))
 
@@ -29,6 +30,7 @@ def run_exp_pure(bert_freeze_layer,
                  seed,
                  rus_rate=0.05,
                  rus_by='residue',
+                 rus_noise_rate=0,
                  use_rus=True,
                  ):
     pipeline = Pipeline(
@@ -48,6 +50,7 @@ def run_exp_pure(bert_freeze_layer,
         rus_kwargs={
             'rus_seed': seed,
             'rus_rate': rus_rate,
+            'rus_noise_rate': rus_noise_rate,
             'rus_by': rus_by,
         } if use_rus else {},
         batch_size=batch_size,
@@ -115,10 +118,45 @@ parameter_by_version = {
         'lr_half_epoch': 12,
         'use_rus': False,
         'pretrained_weight_key': 'rtp_57268',
-    }
+    },
+    2: {
+        'lr': 4e-4,
+        'lr_half_epoch': 12,
+        'rus_rate': 0.05,
+        'rus_by': 'residue',
+        'rus_noise_rate': 0.5,
+        'pretrained_weight_key': 'rtp_57268',
+    },
+    3: {
+        'lr': 4e-4,
+        'lr_half_epoch': 12,
+        'rus_rate': 0.05,
+        'rus_by': 'residue',
+        'rus_noise_rate': 0.7,
+        'pretrained_weight_key': 'rtp_57268',
+    },
+    4: {
+        'lr': 4e-4,
+        'lr_half_epoch': 12,
+        'rus_rate': 0.05,
+        'rus_by': 'residue',
+        'rus_noise_rate': 0.3,
+        'pretrained_weight_key': 'rtp_57268',
+    },
 }
+
+
 def main(param_version, seed_start, seed_end):
     CSV_PATH = 'rus_pipeline_v3.csv'
+    LOCK_PATH = 'rus_pipeline_v3.lock'
+    def process_safe_append_to_csv(new_row):
+        lock = FileLock(LOCK_PATH)
+        
+        with lock:
+            df = read_initial_csv(CSV_PATH)
+            df = pd.concat([df, new_row])
+            df.to_csv(CSV_PATH, index=False)
+
     
     for seed in range(seed_start, seed_end):
         print(f'Start {seed} at {pd.Timestamp.now()}')
@@ -129,9 +167,7 @@ def main(param_version, seed_start, seed_end):
         max_valid_mcc_row = result[-1-patience]
         new_row = pd.DataFrame.from_dict(
             [{'param_version': param_version, **max_valid_mcc_row, 'epoch_count': len(result)}])
-        df = read_initial_csv(CSV_PATH)
-        df = pd.concat([df, new_row])
-        df.to_csv(CSV_PATH, index=False)
+        process_safe_append_to_csv(new_row)
         
         # save model
         early_stop_metric_name = 'valid_mcc'
