@@ -117,7 +117,7 @@ def main():
     if args.pretrained is not None:
         # Load pretrained model
         state_dict = torch.load(args.pretrained, map_location=f'cuda:{args.gpu}')
-        lm_gearnet.load_state_dict(state_dict)
+        lm_gearnet.gearnet.load_state_dict(state_dict)
 
     for epoch in count(start=1):
         try:
@@ -157,7 +157,7 @@ def validate_and_save(solver, lm_gearnet, args, epoch, cur_lr):
     files, accuracy = parse_current_saved_weight(name_prefix)
     if accuracy < result['accuracy']:
         print(f"Saving weight with accuracy {result['accuracy']:.5f}")
-        torch.save(lm_gearnet.state_dict(), f"{name_prefix}_{result['accuracy']:.5f}.pth")
+        torch.save(lm_gearnet.gearnet.state_dict(), f"{name_prefix}_{result['accuracy']:.5f}.pth")
         for file in files:
             os.remove(file)
     
