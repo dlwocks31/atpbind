@@ -29,21 +29,17 @@ def parse_args():
                         help="Path to the pretrained weight file")
     parser.add_argument("--gpu", type=int, default=0,
                         help="GPU to use")
-    parser.add_argument("--bert_freeze_layer_count", type=int, default=30,
-                        help="Number of layers to freeze in BERT")
-    parser.add_argument("--hidden_dim_count", type=int, default=6,
+    parser.add_argument("--hidden_dim_count", type=int, default=4,
                         help="Number of hidden dimensions")
-    parser.add_argument("--hidden_dim_size", type=int, default=512,
-                        help="Size of each hidden dimension")
     parser.add_argument("--batch_size", type=int, default=1,
                         help="Batch size for training")
-    parser.add_argument("--sequential_max_distance", type=int, default=2,
-                        help="Max distance for sequential edge")
-    parser.add_argument("--lr", type=float, default=1e-5,
+    parser.add_argument("--lr", type=float, default=1e-4,
                         help="Learning rate")
     parser.add_argument("--dataset", type=str, default="ec",
                         help="Dataset to use")
     parser.add_argument("--task", type=str, default="rtp")
+    parser.add_argument("--lm", type=str, default="esm-t33",
+                        help="Language model to use")
     return parser.parse_args()
 
 def get_last_ce(meter):
@@ -68,16 +64,12 @@ def main():
                                                         edge_layers=[geometry.SpatialEdge(radius=10.0, min_distance=5),
                                                                      geometry.KNNEdge(
                                                                          k=10, min_distance=5),
-                                                                     geometry.SequentialEdge(max_distance=args.sequential_max_distance)],
+                                                                     geometry.SequentialEdge(max_distance=2)],
                                                         edge_feature="gearnet")
 
-    lm_gearnet = LMGearNetModel(args.gpu,
-                                gearnet_hidden_dim_size=args.hidden_dim_size, 
-                                gearnet_hidden_dim_count=args.hidden_dim_count,
-                                bert_freeze=args.bert_freeze_layer_count==30,
-                                bert_freeze_layer_count=args.bert_freeze_layer_count,
-                                graph_sequential_max_distance=args.sequential_max_distance,
-                                )
+    lm_gearnet = LMGearNetModel(args.gpu, lm_type=args.lm, gearnet_hidden_dim_count=args.hidden_dim_count)
+    
+    lm_gearnet.freeze_lm(freeze_all=True)
 
     if args.task == 'rtp':
         task = CustomAttributeMasking(lm_gearnet, graph_construction_model=graph_construction_model,

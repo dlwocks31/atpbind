@@ -4,8 +4,10 @@ import pandas as pd
 DATA_FILE_PATH = 'lmgearnet_pipeline.json'
 GPU = 0
 
-def run_exp_pure(lm_train_layer, patience):
-    lm_type, total_layer = 'esm-t33', 33
+def run_exp_pure(lm_layer, lm_train_layer, patience):
+    if lm_layer not in [33, 36]:
+        raise ValueError('lm_layer must be 33 or 36')
+    lm_type = f'esm-t{lm_layer}'
     pipeline = Pipeline(
         model='lm-gearnet',
         dataset='atpbind3d',
@@ -16,12 +18,12 @@ def run_exp_pure(lm_train_layer, patience):
             'gearnet_hidden_dim_size': 512,
             'gearnet_hidden_dim_count': 4,
         },
-        batch_size=8,
+        batch_size=8 if lm_layer == 33 else 2,
     )
     
     pipeline.model.freeze_lm(
         freeze_all=lm_train_layer == 0,
-        freeze_layer_count=total_layer - lm_train_layer
+        freeze_layer_count=lm_layer - lm_train_layer
     )
 
     train_record = pipeline.train_until_fit(patience=patience)
@@ -35,22 +37,28 @@ def read_initial_csv(path):
         # File does not exist, or it is empty
         return pd.DataFrame()
 
+def run_parameter_and_save(parameters):
+    CSV_PATH = 'lmgearnet_pipeline.csv'
+    
+    patience = parameters['patience']
+    print(pd.Timestamp.now(), parameters)
+    result = run_exp_pure(**parameters)
+    new_row = pd.DataFrame.from_dict([{**parameters, **result[-1-patience], 'epoch_count': len(result)}])
+    df = read_initial_csv(CSV_PATH)
+    df = pd.concat([df, new_row])
+    df.to_csv(CSV_PATH, index=False)
+
 def main():
     CSV_PATH = 'lmgearnet_pipeline.csv'
     df = read_initial_csv(CSV_PATH)
 
-    for trial in range(10):
-        for train_layer in [1, 2, 3]:
-            patience = 5
-            parameters = {
+    for i in range(10):
+        for train_layer in [1, 2, 3, 4]:
+            run_parameter_and_save({
+                "lm_layer": 36,
                 "lm_train_layer": train_layer,
-                "patience": patience,
-            }
-            print(pd.Timestamp.now(), parameters)
-            result = run_exp_pure(**parameters)
-            new_row = pd.DataFrame.from_dict([{**parameters, **result[-1-patience], 'epoch_count': len(result)}])
-            df = pd.concat([df, new_row])
-            df.to_csv(CSV_PATH, index=False)
+                "patience": 5,
+            })
 
 if __name__ == '__main__':
     main()
