@@ -81,9 +81,11 @@ def main():
         task = tasks.Unsupervised(model, graph_construction_model=graph_construction_model)
 
     optimizer = torch.optim.AdamW(task.parameters(), lr=args.lr, weight_decay=1e-4)
-    # T_0 = 20
-    # scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0, eta_min=1e-6)
+    # T_0 = 50
+    # scheduler = CosineAnnealingWarmRestarts(optimizer, T_0, eta_min=1e-6)
     scheduler = None
+    
+
     
     # Load dataset
     print('Load Dataset')
@@ -126,13 +128,13 @@ def main():
             sleep(60)
 
         if args.task == 'rtp':
-            validate_and_save(solver, lm_gearnet, args, epoch, cur_lr=scheduler.get_last_lr()[0])
+            validate_and_save(solver, lm_gearnet, args, epoch, cur_lr=args.lr)
         elif args.task == 'mvcl':
             torch.save(lm_gearnet.state_dict(), "mvcl.pth")
 
 
 def validate_and_save(solver, lm_gearnet, args, epoch, cur_lr):
-    CSV_FILE = f"pretrain_lmg_{args.task}_{args.hidden_dim_count}.csv"
+    CSV_FILE = f"pretrain_{args.dataset}_{args.task}_{args.hidden_dim_count}.csv"
     fail_cnt = 0
     while True:
         try:
