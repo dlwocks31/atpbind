@@ -7,6 +7,7 @@ from torch.utils import data as torch_data
 import torch
 from lib.disable_logger import DisableLogger
 from lib.custom_models import LMGearNetModel
+from lib.lr_scheduler import CosineAnnealingLR
 from lib.pretrain import CustomAttributeMasking
 from lib.utils import dict_tensor_to_num
 
@@ -31,6 +32,7 @@ def parse_args():
                         help="GPU to use")
     parser.add_argument("--hidden_dim_count", type=int, default=4,
                         help="Number of hidden dimensions")
+    parser.add_argument("--hidden_dim_size", type=int, default=512)
     parser.add_argument("--batch_size", type=int, default=1,
                         help="Batch size for training")
     parser.add_argument("--lr", type=float, default=1e-4,
@@ -67,7 +69,11 @@ def main():
                                                                      geometry.SequentialEdge(max_distance=2)],
                                                         edge_feature="gearnet")
 
-    lm_gearnet = LMGearNetModel(args.gpu, lm_type=args.lm, gearnet_hidden_dim_count=args.hidden_dim_count)
+    lm_gearnet = LMGearNetModel(args.gpu, 
+                                lm_type=args.lm, 
+                                gearnet_hidden_dim_count=args.hidden_dim_count,
+                                gearnet_hidden_dim_size=args.hidden_dim_size
+    )
     
     lm_gearnet.freeze_lm(freeze_all=True)
 
@@ -80,9 +86,9 @@ def main():
                                                     geometry.SubspaceNode(entity_level="residue", min_neighbor=15, min_radius=15.0)], num_mlp_layer=2)
         task = tasks.Unsupervised(model, graph_construction_model=graph_construction_model)
 
-    optimizer = torch.optim.AdamW(task.parameters(), lr=args.lr, weight_decay=1e-4)
-    # T_0 = 50
-    # scheduler = CosineAnnealingWarmRestarts(optimizer, T_0, eta_min=1e-6)
+    optimizer = torch.optim.AdamW(task.parameters(), lr=args.lr, weight_decay=0)
+    # T_0 = 20
+    # scheduler = CosineAnnealingLR(optimizer, T_0, eta_min=1e-5)
     scheduler = None
     
 
@@ -130,7 +136,7 @@ def main():
         if args.task == 'rtp':
             validate_and_save(solver, lm_gearnet, args, epoch, cur_lr=args.lr)
         elif args.task == 'mvcl':
-            torch.save(lm_gearnet.state_dict(), "mvcl.pth")
+            torch.save(lm_gearnet.gearnet.state_dict(), "mvcl.pth")
 
 
 def validate_and_save(solver, lm_gearnet, args, epoch, cur_lr):

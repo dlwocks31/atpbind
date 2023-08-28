@@ -2,7 +2,7 @@ from lib.pipeline import Pipeline
 import pandas as pd
 
 DATA_FILE_PATH = 'lmgearnet_pipeline.json'
-GPU = 0
+GPU = 1
 
 def run_exp_pure(lm_layer, lm_train_layer, patience):
     if lm_layer not in [33, 36]:
@@ -53,7 +53,7 @@ def main():
     df = read_initial_csv(CSV_PATH)
 
     for i in range(10):
-        for train_layer in [1, 2, 3, 4]:
+        for train_layer in [2, 3, 4]:
             run_parameter_and_save({
                 "lm_layer": 36,
                 "lm_train_layer": train_layer,

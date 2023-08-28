@@ -17,33 +17,44 @@ def device():
 
 pretrained_weight_map = {
     'rtp_57268': '../ResidueType_lmg_4_512_0.57268.pth',
+    'esm_49951': '../esm_t33_gearnet_0.49951.pth',
+}
+
+lm_type_map = {
+    'bert': 30,
+    'esm-t33': 33,
+    'esm-t36': 36,
 }
 
 def run_exp_pure(bert_freeze_layer,
                  pretrained_layers,
                  pretrained_weight_key,
                  gearnet_freeze_layer,
+                 gearnet_hidden_dim_size,
                  lr,
                  batch_size,
                  patience,
                  lr_half_epoch,
                  seed,
                  mlp_lr_ratio,
+                 lm_type,
+                 bce_weight,
                  rus_rate=0.05,
                  rus_by='residue',
                  rus_noise_rate=0,
                  use_rus=True,
+                 gpu=None,
                  ):
+    gpu = GPU if gpu is None else gpu
     pipeline = Pipeline(
         model='lm-gearnet',
         dataset='atpbind3d',
-        gpus=[GPU],
+        gpus=[gpu],
         model_kwargs={
-            'gpu': GPU,
-            'gearnet_hidden_dim_size': 512,
+            'gpu': gpu,
+            'lm_type' : lm_type,
+            'gearnet_hidden_dim_size': gearnet_hidden_dim_size,
             'gearnet_hidden_dim_count': pretrained_layers,
-            'bert_freeze': bert_freeze_layer == 30,
-            'bert_freeze_layer_count': bert_freeze_layer,
         },
         optimizer_kwargs={    
             'lr': lr,
@@ -56,7 +67,11 @@ def run_exp_pure(bert_freeze_layer,
         } if use_rus else {},
         batch_size=batch_size,
         optimizer='adam',
+        bce_weight=bce_weight,
     )
+    total_lm_layer = lm_type_map[lm_type]
+    pipeline.model.freeze_lm(freeze_all=bert_freeze_layer == total_lm_layer, freeze_layer_count=bert_freeze_layer)
+    
     if pretrained_weight_key is not None:
         state_dict = torch.load(pretrained_weight_map[pretrained_weight_key],
                                 map_location=f'cuda:{GPU}')
@@ -108,6 +123,7 @@ def create_single_pred_dataframe(pipeline, dataset):
 
 
 base_param = {
+    'lm_type': 'bert',
     'bert_freeze_layer': 28,
     'pretrained_layers': 4,
     'gearnet_freeze_layer': 0,
@@ -116,6 +132,17 @@ base_param = {
     'lr': 4e-4,
     'lr_half_epoch': 12,
     'pretrained_weight_key': 'rtp_57268',
+    'bce_weight': 1,
+    'gearnet_hidden_dim_size': 512,
+}
+
+esm_base_param = {
+    'lr': 1e-3,
+    'lm_type': 'esm-t33',
+    'bert_freeze_layer': 31,
+    'pretrained_layers': 4,
+    'pretrained_weight_key': None,
+    'patience': 5,
 }
 
 parameter_by_version = {
@@ -154,10 +181,139 @@ parameter_by_version = {
         'lr': 1e-4,
         'mlp_lr_ratio': 5.0,
     },
+    # use esm
+    8: {
+        **esm_base_param,
+        'use_rus': False,
+    },
+    9: {
+        **esm_base_param,
+        'use_rus': True,
+        'rus_rate': 0.05,
+        'rus_by': 'residue',
+        'rus_noise_rate': 1,
+    },
+    10: { # v8 + lr_half_epoch 0
+        **esm_base_param,
+        'lr_half_epoch': 0,
+        'use_rus': False,
+    },
+    11: { # v9 + lr_half_epoch 0
+        **esm_base_param,
+        'lr_half_epoch': 0,
+        'use_rus': True,
+        'rus_rate': 0.05,
+        'rus_by': 'residue',
+        'rus_noise_rate': 1,
+    },
+    12: { # v11 + patience
+        **esm_base_param,
+        'lr_half_epoch': 0,
+        'use_rus': True,
+        'rus_rate': 0.05,
+        'rus_by': 'residue',
+        'rus_noise_rate': 1,
+        'patience': 10,
+    },
+    13: { # v12 + noise rate 0.7
+        **esm_base_param,
+        'lr_half_epoch': 0,
+        'use_rus': True,
+        'rus_rate': 0.05,
+        'rus_by': 'residue',
+        'rus_noise_rate': 0.7,
+        'patience': 10,
+    },
+    # TRAIN 3 LAYERS
+    14: { # No RUS
+        **esm_base_param,
+        'lr_half_epoch': 0,
+        'use_rus': False,
+        'bert_freeze_layer': 30,
+    },
+    15 : { # RUS Noise Rate 0.7
+        **esm_base_param,
+        'lr_half_epoch': 0,
+        'use_rus': True,
+        'rus_rate': 0.05,
+        'rus_by': 'residue',
+        'rus_noise_rate': 0.7,
+        'bert_freeze_layer': 30,
+    },
+    16 : { # RUS Noise Rate 1
+        **esm_base_param,
+        'lr_half_epoch': 0,
+        'use_rus': True,
+        'rus_rate': 0.05,
+        'rus_by': 'residue',
+        'rus_noise_rate': 1,
+        'bert_freeze_layer': 30,
+    },
+    17 : { # RUS Noise Rate 0.9
+        **esm_base_param,
+        'lr_half_epoch': 0,
+        'use_rus': True,
+        'rus_rate': 0.05,
+        'rus_by': 'residue',
+        'rus_noise_rate': 0.9,
+        'bert_freeze_layer': 30,
+    },
+    18 : { # High RUS Rate with no noise
+        **esm_base_param,
+        'lr_half_epoch': 0,
+        'use_rus': True,
+        'rus_rate': 0.5,
+        'rus_by': 'residue',
+        'rus_noise_rate': 0,
+        'bert_freeze_layer': 30,
+    },
+    19: { # Add pretraining
+        **esm_base_param,
+        'lr_half_epoch': 0,
+        'use_rus': False,
+        'bert_freeze_layer': 30,
+        'pretrained_weight_key': 'esm_49951',
+    },
+    20 : { # High RUS Rate, With some noise
+        **esm_base_param,
+        'lr_half_epoch': 0,
+        'use_rus': True,
+        'rus_rate': 0.5,
+        'rus_by': 'residue',
+        'rus_noise_rate': 0.7,
+        'bert_freeze_layer': 30,
+    },
+    21 : { # High RUS Rate, With some noise, and with lr half epoch and patience
+        **esm_base_param,
+        'lr_half_epoch': 10,
+        'patience': 10,
+        'use_rus': True,
+        'rus_rate': 0.5,
+        'rus_by': 'residue',
+        'rus_noise_rate': 0.7,
+        'bert_freeze_layer': 30,
+    },
+    22: { # No RUS, bce weight
+        **esm_base_param,
+        'lr_half_epoch': 0,
+        'use_rus': False,
+        'bert_freeze_layer': 30,
+        'bce_weight': 5,
+    },
+    23 : { # High RUS Rate, With some noise, and with lr half epoch and patience
+        **esm_base_param,
+        'lr_half_epoch': 8,
+        'patience': 8,
+        'use_rus': True,
+        'rus_rate': 0.2,
+        'rus_by': 'residue',
+        'rus_noise_rate': 0.5,
+        'bert_freeze_layer': 30,
+    },
 }
 
 
-def main(param_version, seed_start, seed_end, batch_size):
+def main(param_versions, seed_start, seed_end, batch_size):
     CSV_PATH = 'rus_pipeline_v3.csv'
     LOCK_PATH = 'rus_pipeline_v3.lock'
     def process_safe_append_to_csv(new_row):
@@ -167,43 +323,46 @@ def main(param_version, seed_start, seed_end, batch_size):
             df = read_initial_csv(CSV_PATH)
             df = pd.concat([df, new_row])
             df.to_csv(CSV_PATH, index=False)
-
+            
+    print(f'Param versions: {param_versions}')
     
     for seed in range(seed_start, seed_end):
-        print(f'Start {seed} at {pd.Timestamp.now()}')
-        patience = 10
-        parameters = {**base_param, **parameter_by_version[param_version], 'seed': seed}
-        print({**parameter_by_version[param_version], 'seed': seed})
-        result, state_dict, pipeline = run_exp_pure(**parameters, batch_size=batch_size)
-        max_valid_mcc_row = result[-1-patience]
-        new_row = pd.DataFrame.from_dict(
-            [{'param_version': param_version, **max_valid_mcc_row, 'epoch_count': len(result)}])
-        process_safe_append_to_csv(new_row)
-        
-        # save model
-        early_stop_metric_name = 'valid_mcc'
+        for param_version in param_versions:
+            print(f'Start {seed}, v{param_version} at {pd.Timestamp.now()}')
+            parameters = {**base_param, **parameter_by_version[param_version], 'seed': seed}
+            print({**parameter_by_version[param_version], 'seed': seed})
+            result, state_dict, pipeline = run_exp_pure(**parameters, batch_size=batch_size)
+            max_valid_mcc_index = max(range(len(result)), key=lambda i: result[i]['valid_mcc'])
+            max_valid_mcc_row = result[max_valid_mcc_index]
+            new_row = pd.DataFrame.from_dict(
+                [{'param_version': param_version, **max_valid_mcc_row, 'epoch_count': len(result)}])
+            process_safe_append_to_csv(new_row)
+            
+            # save model
+            early_stop_metric_name = 'valid_mcc'
 
-        early_stop_metric = max_valid_mcc_row[early_stop_metric_name]
-        csv_prefix = f'v{param_version:03d}_{seed}_{early_stop_metric:.4f}'
-        
-        pipeline.task.load_state_dict(state_dict)
-        pipeline.task.eval()
-        
-        df_valid = create_single_pred_dataframe(pipeline, pipeline.valid_set)
-        df_valid.to_csv(f'preds/{csv_prefix}_valid.csv', index=False)
-        
-        df_test = create_single_pred_dataframe(pipeline, pipeline.test_set)
-        df_test.to_csv(f'preds/{csv_prefix}_test.csv', index=False)
+            early_stop_metric = max_valid_mcc_row[early_stop_metric_name]
+            csv_prefix = f'v{param_version:03d}_{seed}_{early_stop_metric:.4f}'
+            
+            pipeline.task.load_state_dict(state_dict)
+            pipeline.task.eval()
+            
+            df_valid = create_single_pred_dataframe(pipeline, pipeline.valid_set)
+            df_valid.to_csv(f'preds/{csv_prefix}_valid.csv', index=False)
+            
+            df_test = create_single_pred_dataframe(pipeline, pipeline.test_set)
+            df_test.to_csv(f'preds/{csv_prefix}_test.csv', index=False)
 
 
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--gpu', type=int, default=0)
-    parser.add_argument('--param_version', type=int, default=1)
+    parser.add_argument('--param_versions', type=int, nargs='+', default=[1])
     parser.add_argument('--seed_start', type=int, default=0)
     parser.add_argument('--seed_end', type=int, default=10)
     parser.add_argument('--batch_size', type=int, default=8)
     args = parser.parse_args()
     GPU = args.gpu
-    main(param_version=args.param_version, seed_start=args.seed_start, seed_end=args.seed_end, batch_size=args.batch_size)
+    
+    main(param_versions=args.param_versions, seed_start=args.seed_start, seed_end=args.seed_end, batch_size=args.batch_size)
