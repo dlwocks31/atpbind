@@ -66,9 +66,10 @@ class LMGearNetModel(torch.nn.Module, core.Configurable):
 
         gearnet_output = self.gearnet(graph, lm_output)
 
-
-        final_output = torch.cat([gearnet_output, lm_output], dim=1) if self.lm_concat_to_output else gearnet_output
-        return final_output
+        final_output = torch.cat([gearnet_output['node_feature'], lm_output], dim=-1) if self.lm_concat_to_output else gearnet_output['node_feature']
+        return {
+            "node_feature": final_output,
+        }
     
     def freeze_lm(self, freeze_all=True, freeze_layer_count=None):
         if freeze_all:
