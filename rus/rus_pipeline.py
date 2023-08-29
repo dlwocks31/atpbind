@@ -39,6 +39,9 @@ def run_exp_pure(bert_freeze_layer,
                  mlp_lr_ratio,
                  lm_type,
                  bce_weight,
+                 gearnet_short_cut,
+                 gearnet_concat_hidden,
+                 lm_concat_to_output,
                  rus_rate=0.05,
                  rus_by='residue',
                  rus_noise_rate=0,
@@ -55,6 +58,9 @@ def run_exp_pure(bert_freeze_layer,
             'lm_type' : lm_type,
             'gearnet_hidden_dim_size': gearnet_hidden_dim_size,
             'gearnet_hidden_dim_count': pretrained_layers,
+            'gearnet_short_cut': gearnet_short_cut,
+            'gearnet_concat_hidden': gearnet_concat_hidden,
+            'lm_concat_to_output': lm_concat_to_output,
         },
         optimizer_kwargs={    
             'lr': lr,
@@ -134,6 +140,9 @@ base_param = {
     'pretrained_weight_key': 'rtp_57268',
     'bce_weight': 1,
     'gearnet_hidden_dim_size': 512,
+    'gearnet_short_cut': True,
+    'gearnet_concat_hidden': True,
+    'lm_concat_to_output': False,
 }
 
 esm_base_param = {
@@ -225,7 +234,7 @@ parameter_by_version = {
         'patience': 10,
     },
     # TRAIN 3 LAYERS
-    14: { # No RUS
+    14: { # No RUS **BASELINE**
         **esm_base_param,
         'lr_half_epoch': 0,
         'use_rus': False,
@@ -309,6 +318,65 @@ parameter_by_version = {
         'rus_by': 'residue',
         'rus_noise_rate': 0.5,
         'bert_freeze_layer': 30,
+    },
+    # v6 BERT without pretrain
+    24: {
+        'rus_rate': 0.05,
+        'rus_by': 'residue',
+        'rus_noise_rate': 1,
+        'pretrained_weight_key': None,
+    },
+    25 : { # High RUS Rate with no noise
+        **esm_base_param,
+        'lr_half_epoch': 0,
+        'use_rus': True,
+        'rus_rate': 0.2,
+        'rus_by': 'residue',
+        'rus_noise_rate': 0,
+        'bert_freeze_layer': 30,
+    },
+    26: { # More GearNet Layer?
+        **esm_base_param,
+        'lr_half_epoch': 0,
+        'use_rus': False,
+        'bert_freeze_layer': 30,
+        'pretrained_layers': 6,
+    },
+    27: { # Less GearNet Layer?
+        **esm_base_param,
+        'lr_half_epoch': 0,
+        'use_rus': False,
+        'bert_freeze_layer': 30,
+        'pretrained_layers': 2,
+    },
+    28: { # Was short_cut important?
+        **esm_base_param,
+        'lr_half_epoch': 0,
+        'use_rus': False,
+        'bert_freeze_layer': 30,
+        'gearnet_short_cut': False,
+    },
+    29: { # Was concat_hidden important?
+        **esm_base_param,
+        'lr_half_epoch': 0,
+        'use_rus': False,
+        'bert_freeze_layer': 30,
+        'gearnet_concat_hidden': False,
+    },
+    30: { # Remove both?
+        **esm_base_param,
+        'lr_half_epoch': 0,
+        'use_rus': False,
+        'bert_freeze_layer': 30,
+        'gearnet_short_cut': False,
+        'gearnet_concat_hidden': False,
+    },
+    31: { # Is concat_to_output important?
+        **esm_base_param,
+        'lr_half_epoch': 0,
+        'use_rus': False,
+        'bert_freeze_layer': 30,
+        'lm_concat_to_output': True,
     },
 }
 

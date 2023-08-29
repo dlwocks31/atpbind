@@ -4,36 +4,6 @@ from transformers import BertModel, BertTokenizer, AutoTokenizer, EsmModel
 import torch
 from torchdrug import core, models
 
-
-def _freeze_bert(
-    bert_model: BertModel, freeze_bert=True, freeze_layer_count=-1
-):
-    """Freeze parameters in BertModel (in place)
-
-    Args:
-        bert_model: HuggingFace bert model
-        freeze_bert: Bool whether or not to freeze the bert model
-        freeze_layer_count: If freeze_bert, up to what layer to freeze.
-
-    Returns:
-        bert_model
-    """
-    if freeze_bert:
-        # freeze the entire bert model
-        for param in bert_model.parameters():
-            param.requires_grad = False
-    else:
-        # freeze the embeddings
-        for param in bert_model.embeddings.parameters():
-            param.requires_grad = False
-        if freeze_layer_count != -1:
-            # freeze layers in bert_model.encoder
-            for layer in bert_model.encoder.layer[:freeze_layer_count]:
-                for param in layer.parameters():
-                    param.requires_grad = False
-    return None
-
-
 def separate_alphabets(text):
     separated_text = ""
     for char in text:
@@ -53,6 +23,9 @@ class LMGearNetModel(torch.nn.Module, core.Configurable):
                  lm_type='bert',
                  gearnet_hidden_dim_size=512,
                  gearnet_hidden_dim_count=6,
+                 gearnet_short_cut=True,
+                 gearnet_concat_hidden=True,
+                 lm_concat_to_output=False,
     ):
         super().__init__()
         Model, Tokenizer, pretrained_model_name = lm_type_map[lm_type]
@@ -65,12 +38,13 @@ class LMGearNetModel(torch.nn.Module, core.Configurable):
             edge_input_dim=59,
             num_angle_bin=8,
             batch_norm=True,
-            concat_hidden=True,
-            short_cut=True,
+            concat_hidden=gearnet_concat_hidden,
+            short_cut=gearnet_short_cut,
             readout="sum"
         ).to(f'cuda:{gpu}')
         self.input_dim = 21
-        self.output_dim = self.gearnet.output_dim
+        self.output_dim = self.gearnet.output_dim + self.lm.config.hidden_size if lm_concat_to_output else self.gearnet.output_dim
+        self.lm_concat_to_output = lm_concat_to_output
         self.gpu = gpu
 
     def forward(self, graph, _, all_loss=None, metric=None):
@@ -90,9 +64,11 @@ class LMGearNetModel(torch.nn.Module, core.Configurable):
         
         lm_output = torch.cat(lm_residue_feature)
 
-        # print(f'lm_output shape: {lm_output.shape}')
         gearnet_output = self.gearnet(graph, lm_output)
-        return gearnet_output
+
+
+        final_output = torch.cat([gearnet_output, lm_output], dim=1) if self.lm_concat_to_output else gearnet_output
+        return final_output
     
     def freeze_lm(self, freeze_all=True, freeze_layer_count=None):
         if freeze_all:
