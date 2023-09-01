@@ -52,7 +52,7 @@ def run_exp_pure(bert_freeze_layer,
     gpu = GPU if gpu is None else gpu
     pipeline = Pipeline(
         model='lm-gearnet',
-        dataset='atpbind3d-minimal',
+        dataset='atpbind3d',
         gpus=[gpu],
         model_kwargs={
             'gpu': gpu,
