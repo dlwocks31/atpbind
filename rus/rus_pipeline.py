@@ -42,6 +42,7 @@ def run_exp_pure(bert_freeze_layer,
                  gearnet_short_cut,
                  gearnet_concat_hidden,
                  lm_concat_to_output,
+                 lm_short_cut,
                  rus_rate=0.05,
                  rus_by='residue',
                  rus_noise_rate=0,
@@ -51,7 +52,7 @@ def run_exp_pure(bert_freeze_layer,
     gpu = GPU if gpu is None else gpu
     pipeline = Pipeline(
         model='lm-gearnet',
-        dataset='atpbind3d',
+        dataset='atpbind3d-minimal',
         gpus=[gpu],
         model_kwargs={
             'gpu': gpu,
@@ -61,6 +62,7 @@ def run_exp_pure(bert_freeze_layer,
             'gearnet_short_cut': gearnet_short_cut,
             'gearnet_concat_hidden': gearnet_concat_hidden,
             'lm_concat_to_output': lm_concat_to_output,
+            'lm_short_cut': lm_short_cut,
         },
         optimizer_kwargs={    
             'lr': lr,
@@ -143,6 +145,7 @@ base_param = {
     'gearnet_short_cut': True,
     'gearnet_concat_hidden': True,
     'lm_concat_to_output': False,
+    'lm_short_cut': False,
 }
 
 esm_base_param = {
@@ -376,7 +379,30 @@ parameter_by_version = {
         'lr_half_epoch': 0,
         'use_rus': False,
         'bert_freeze_layer': 30,
+        'gearnet_short_cut': False,
+        'gearnet_concat_hidden': False,
         'lm_concat_to_output': True,
+    },
+    32: { # Fatter GearNet
+        **esm_base_param,
+        'lr_half_epoch': 0,
+        'use_rus': False,
+        'bert_freeze_layer': 30,
+        'gearnet_short_cut': False,
+        'gearnet_concat_hidden': False,
+        'pretrained_layers': 2,
+        'gearnet_hidden_dim_size': 1280,
+    },
+    33: { # Fatter GearNet, with shortcut connection
+        **esm_base_param,
+        'lr_half_epoch': 0,
+        'use_rus': False,
+        'bert_freeze_layer': 30,
+        'gearnet_short_cut': False,
+        'gearnet_concat_hidden': False,
+        'pretrained_layers': 2,
+        'gearnet_hidden_dim_size': 1280,
+        'lm_short_cut': True,
     },
 }
 
