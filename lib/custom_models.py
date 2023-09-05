@@ -26,6 +26,7 @@ class LMGearNetModel(torch.nn.Module, core.Configurable):
                  gearnet_short_cut=True,
                  gearnet_concat_hidden=True,
                  lm_concat_to_output=False,
+                 lm_short_cut=False,
     ):
         super().__init__()
         Model, Tokenizer, pretrained_model_name = lm_type_map[lm_type]
@@ -45,6 +46,9 @@ class LMGearNetModel(torch.nn.Module, core.Configurable):
         self.input_dim = 21
         self.output_dim = self.gearnet.output_dim + self.lm.config.hidden_size if lm_concat_to_output else self.gearnet.output_dim
         self.lm_concat_to_output = lm_concat_to_output
+        if lm_short_cut:
+            assert self.gearnet.output_dim == self.lm.config.hidden_size, "lm_short_cut is only available when gearnet output dim is equal to lm hidden size"
+        self.lm_short_cut = lm_short_cut
         self.gpu = gpu
 
     def forward(self, graph, _, all_loss=None, metric=None):
@@ -67,6 +71,9 @@ class LMGearNetModel(torch.nn.Module, core.Configurable):
         gearnet_output = self.gearnet(graph, lm_output)
 
         final_output = torch.cat([gearnet_output['node_feature'], lm_output], dim=-1) if self.lm_concat_to_output else gearnet_output['node_feature']
+
+        if self.lm_short_cut:
+            final_output = final_output + lm_output
         return {
             "node_feature": final_output,
         }

@@ -48,7 +48,7 @@ class Pipeline:
     possible_datasets = ['atpbind', 'atpbind3d', 'atpbind3d-minimal']
     threshold = 0
     
-    def __init__(self, 
+    def __init__(self,
                  model,
                  dataset,
                  gpus,
@@ -65,8 +65,8 @@ class Pipeline:
                  ):
         self.gpus = gpus
 
-        if model not in self.possible_models:
-            raise ValueError('Model must be one of {}'.format(self.possible_models))
+        if model not in self.possible_models and not isinstance(model, torch.nn.Module):
+            raise ValueError('Model must be one of {}, or is torch.nn.Module'.format(self.possible_models))
     
         if dataset not in self.possible_datasets:
             raise ValueError('Dataset must be one of {}'.format(self.possible_datasets))
@@ -82,6 +82,10 @@ class Pipeline:
                 self.model = models.ProteinCNN(**model_kwargs)
             elif model == 'esm-t33' or model == 'esm-t36' or model == 'esm-t48':
                 self.model = EsmWrapModel(model_type=model, **model_kwargs)
+            elif isinstance(model, torch.nn.Module): # pre built model, eg LoraModel. I wonder wheter there is better way to check this
+                self.model = model
+                
+
         
         self.train_set, self.valid_set, self.test_set = get_dataset(dataset).initialize_rus(**rus_kwargs).split(valid_fold_num=valid_fold_num)
         print("train samples: %d, valid samples: %d, test samples: %d" %

@@ -4,7 +4,7 @@ import pandas as pd
 
 DATA_FILE_PATH = 'bert_pipeline.json'
 
-GPU = 1
+GPU = 0
 
 def run_exp_pure(model, train_layer, total_layer, patience=5):
     pipeline = Pipeline(
@@ -34,9 +34,9 @@ def main():
     CSV_PATH = 'bert_pipeline.csv'
     df = read_initial_csv(CSV_PATH)
 
-    for trial in range(10):
-        for model, total_layer in [('esm-t33', 33), ('esm-t36', 36)]:
-            for train_layer in [3, 3]:
+    for trial in range(2):
+        for model, total_layer in [('esm-t33', 33)]:
+            for train_layer in [3]:
                 patience = 5
                 parameters = {
                     "total_layer": total_layer,
