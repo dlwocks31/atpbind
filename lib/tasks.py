@@ -93,6 +93,8 @@ class NodePropertyPrediction(tasks.Task, core.Configurable):
 
         pred, target = self.predict_and_target(batch, all_loss, metric)
         labeled = ~torch.isnan(target["label"]) & target["mask"]
+        
+        # print(f'in forward: mask: {target["mask"].sum()} / {len(target["mask"])}')
 
         for criterion, weight in self.criterion.items():
             if criterion == "mse":

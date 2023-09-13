@@ -56,7 +56,7 @@ class Pipeline:
                  model_kwargs={},
                  optimizer_kwargs={},
                  task_kwargs={},
-                 rus_kwargs={},
+                 undersample_kwargs={},
                  batch_size=1,
                  bce_weight=1,
                  verbose=False,
@@ -71,23 +71,10 @@ class Pipeline:
         if dataset not in self.possible_datasets:
             raise ValueError('Dataset must be one of {}'.format(self.possible_datasets))
            
-        with DisableLogger():     
-            if model == 'bert':
-                self.model = BertWrapModel(**model_kwargs)
-            elif model == 'gearnet':
-                self.model = GearNetWrapModel(**model_kwargs)
-            elif model == 'lm-gearnet':
-                self.model = LMGearNetModel(**model_kwargs)
-            elif model == 'cnn':
-                self.model = models.ProteinCNN(**model_kwargs)
-            elif model == 'esm-t33' or model == 'esm-t36' or model == 'esm-t48':
-                self.model = EsmWrapModel(model_type=model, **model_kwargs)
-            elif isinstance(model, torch.nn.Module): # pre built model, eg LoraModel. I wonder wheter there is better way to check this
-                self.model = model
-                
-
+        self.load_model(model, **model_kwargs)
         
-        self.train_set, self.valid_set, self.test_set = get_dataset(dataset).initialize_rus(**rus_kwargs).split(valid_fold_num=valid_fold_num)
+        self.dataset = get_dataset(dataset)
+        self.train_set, self.valid_set, self.test_set = self.dataset.initialize_undersampling(**undersample_kwargs).split(valid_fold_num=valid_fold_num)
         print("train samples: %d, valid samples: %d, test samples: %d" %
               (len(self.train_set), len(self.valid_set), len(self.test_set)))
         
@@ -158,11 +145,27 @@ class Pipeline:
         
         self.verbose = verbose
         self.batch_size = batch_size
-        
+
+    def load_model(self, model, **model_kwargs):
+        print(f'load model {model}, kwargs: {model_kwargs}')
+        with DisableLogger():
+            if model == 'bert':
+                self.model = BertWrapModel(**model_kwargs)
+            elif model == 'gearnet':
+                self.model = GearNetWrapModel(**model_kwargs)
+            elif model == 'lm-gearnet':
+                self.model = LMGearNetModel(**model_kwargs)
+            elif model == 'cnn':
+                self.model = models.ProteinCNN(**model_kwargs)
+            elif model == 'esm-t33' or model == 'esm-t36' or model == 'esm-t48':
+                self.model = EsmWrapModel(model_type=model, **model_kwargs)
+            elif isinstance(model, torch.nn.Module): # pre built model, eg LoraModel. I wonder wheter there is better way to check this
+                self.model = model
+
     def train(self, num_epoch):
         return self.solver.train(num_epoch=num_epoch)
     
-    def train_until_fit(self, patience=1, early_stop_metric='valid_mcc', return_state_dict=False):
+    def train_until_fit(self, patience=1, early_stop_metric='valid_mcc', return_state_dict=False, use_dynamic_threshold=True):
         if early_stop_metric not in ['valid_mcc', 'valid_bce']:
             raise ValueError('early_stop_metric must be one of {}'.format(['valid_mcc', 'valid_bce']))
         from itertools import count
@@ -177,12 +180,15 @@ class Pipeline:
                 self.train(num_epoch=1)
                 
                 # record
-                cur_result = self.evaluate()
+                cur_result = self.evaluate(split='test', threshold=0) # ?? why this no use dynamic threshold I'm not sure
                 cur_result['train_bce'] = self.get_last_bce()
                 cur_result['valid_bce'] = self.calculate_valid_loss()
-                cur_result['valid_mcc'] = self.calculate_best_mcc_and_threshold(
-                    threshold_set='valid'
-                )['best_mcc']
+                if use_dynamic_threshold:
+                    cur_result['valid_mcc'] = self.calculate_best_mcc_and_threshold(
+                        threshold_set='valid'
+                    )['best_mcc']
+                else:
+                    cur_result['valid_mcc'] = self.evaluate(split='valid', threshold=0)['mcc']
                 cur_result = round_dict(cur_result, 4)
                 train_record.append(cur_result)
                 
@@ -265,7 +271,7 @@ class Pipeline:
         }
 
 
-    def evaluate(self, verbose=False, threshold=0):
+    def evaluate(self, split="test", verbose=False, threshold=0):
         if threshold == 'auto':
             mcc_and_threshold = self.calculate_best_mcc_and_threshold(threshold_set='valid')
             if verbose:
@@ -273,4 +279,4 @@ class Pipeline:
             self.task.threshold = mcc_and_threshold['best_threshold']
         else:
             self.task.threshold = threshold
-        return dict_tensor_to_num(self.solver.evaluate("test"))
+        return dict_tensor_to_num(self.solver.evaluate(split=split))
