@@ -30,10 +30,10 @@ def format_timedelta(td: timedelta) -> str:
     return f"{minutes}m{seconds}s"
 
 @cache
-def get_dataset(dataset):
+def get_dataset(dataset, max_length=350):
     print(f'get dataset {dataset}')
     if dataset == 'atpbind3d' or dataset == 'atpbind3d-minimal':
-        truncuate_transform = transforms.TruncateProtein(max_length=350, random=False)
+        truncuate_transform = transforms.TruncateProtein(max_length=max_length, random=False)
         protein_view_transform = transforms.ProteinView(view='residue')
         transform = transforms.Compose([truncuate_transform, protein_view_transform])
 
@@ -62,6 +62,7 @@ class Pipeline:
                  verbose=False,
                  optimizer='adam',
                  valid_fold_num=0,
+                 max_length=350,
                  ):
         self.gpus = gpus
 
@@ -73,7 +74,7 @@ class Pipeline:
            
         self.load_model(model, **model_kwargs)
         
-        self.dataset = get_dataset(dataset)
+        self.dataset = get_dataset(dataset, max_length=max_length)
         self.train_set, self.valid_set, self.test_set = self.dataset.initialize_undersampling(**undersample_kwargs).split(valid_fold_num=valid_fold_num)
         print("train samples: %d, valid samples: %d, test samples: %d" %
               (len(self.train_set), len(self.valid_set), len(self.test_set)))

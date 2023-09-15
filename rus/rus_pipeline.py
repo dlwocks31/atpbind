@@ -47,7 +47,9 @@ def run_exp_pure(bert_freeze_layer,
                  rus_by='residue',
                  rus_noise_rate=0,
                  use_rus=True,
+                 use_dynamic_threshold=True,
                  gpu=None,
+                 max_length=350,
                  ):
     gpu = GPU if gpu is None else gpu
     pipeline = Pipeline(
@@ -67,7 +69,7 @@ def run_exp_pure(bert_freeze_layer,
         optimizer_kwargs={    
             'lr': lr,
         },
-        rus_kwargs={
+        undersample_kwargs={
             'rus_seed': seed,
             'rus_rate': rus_rate,
             'rus_noise_rate': rus_noise_rate,
@@ -76,6 +78,7 @@ def run_exp_pure(bert_freeze_layer,
         batch_size=batch_size,
         optimizer='adam',
         bce_weight=bce_weight,
+        max_length=max_length,
     )
     total_lm_layer = lm_type_map[lm_type]
     pipeline.model.freeze_lm(freeze_all=bert_freeze_layer == total_lm_layer, freeze_layer_count=bert_freeze_layer)
@@ -96,7 +99,8 @@ def run_exp_pure(bert_freeze_layer,
     
     train_record, state_dict = pipeline.train_until_fit(
         patience=patience, 
-        return_state_dict=True
+        return_state_dict=True,
+        use_dynamic_threshold=use_dynamic_threshold,
     )
     return (train_record, state_dict, pipeline)
 
@@ -146,6 +150,8 @@ base_param = {
     'gearnet_concat_hidden': True,
     'lm_concat_to_output': False,
     'lm_short_cut': False,
+    'use_dynamic_threshold': True,
+    'max_length': 350,
 }
 
 esm_base_param = {
@@ -403,6 +409,29 @@ parameter_by_version = {
         'pretrained_layers': 2,
         'gearnet_hidden_dim_size': 1280,
         'lm_short_cut': True,
+    },
+    34: { # High RUS Rate with full noise
+        **esm_base_param,
+        'lr_half_epoch': 0,
+        'use_rus': True,
+        'rus_rate': 0.5,
+        'rus_by': 'residue',
+        'rus_noise_rate': 1,
+        'bert_freeze_layer': 30,
+    },
+    35: { # No RUS, no dynamic threshold
+        **esm_base_param,
+        'lr_half_epoch': 0,
+        'use_rus': False,
+        'bert_freeze_layer': 30,
+        'use_dynamic_threshold': False,
+    },
+    36: { # adjust max length
+        **esm_base_param,
+        'lr_half_epoch': 0,
+        'use_rus': False,
+        'bert_freeze_layer': 30,
+        'max_length': 1000,
     },
 }
 
