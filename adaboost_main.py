@@ -1,8 +1,8 @@
 from lib.pipeline import Pipeline
-import torch
 from torchdrug import utils, data
 import pandas as pd
 import os
+import re
 
 GPU = 1
 
@@ -15,24 +15,15 @@ def read_initial_csv(path):
         return pd.DataFrame()
 
 
-def get_train_preds_with_prefixes(prefixes, seed_start=0, seed_end=20):
-    if isinstance(prefixes, str):
-        prefixes = [prefixes]
+def get_train_preds_with_prefix(prefix):
     csv_files = [file for file in os.listdir('preds') if file.endswith('.csv')]
     csv_files.sort()
-    print(csv_files)
-    preds = []
-    for seed in range(seed_start, seed_end):
-        for prefix in prefixes:
-            filtered = [file for file in csv_files if file.startswith(
-                f'{prefix}_{seed:02d}_') and 'train' in file]  # get all file with same seed
-            if filtered:
-                preds.append(f'preds/{filtered[0]}')
-    return preds
+    filtered = [file for file in csv_files if re.match(
+        f'{prefix}_\d+_train\.csv', file)]
+    return [f'preds/{i}' for i in filtered]
 
 
 def aggregate_pred_dataframe(files):
-    print(files)
     dfs = [pd.read_csv(f) for f in files]
     final_df = dfs[0].rename(columns={'pred': 'pred_0'})
     for i in range(1, len(dfs)):
@@ -67,6 +58,32 @@ def create_single_pred_dataframe(pipeline, dataset):
     return df
 
 
+def build_mask_from_prefix_me(masks, prefix, mask_negative_ratio, valid_fold):
+    # fill all the masks with True
+    for i in range(len(masks)):
+        masks[i].fill_(True)
+
+    all_train_pred_files = get_train_preds_with_prefix(prefix)
+    if not all_train_pred_files:
+        print('No files found')
+        return masks
+    print('Building mask from files: ', all_train_pred_files)
+    df_train_pred = create_mean_ensemble_pred_dataframe(all_train_pred_files)
+    negative_df = df_train_pred[df_train_pred['target'] == 0]
+
+    confident_negatives = negative_df.sort_values(
+        by=['pred'])[:int(len(negative_df) * mask_negative_ratio)]
+
+    for _, row in confident_negatives.iterrows():
+        index_in_dataset = int(row['protein_index'])
+        # assume valid fold is consecutive
+        if row['protein_index'] >= valid_fold[0]:
+            index_in_dataset += len(valid_fold)
+        masks[index_in_dataset][int(row['residue_index'])] = False
+
+    return masks
+
+
 def adaboost_iter(iter_num, masks=None, prefix='adaboost', mask_negative_ratio=0.5):
     # initialize new pipeline
     print('Initializing new pipeline')
@@ -84,18 +101,24 @@ def adaboost_iter(iter_num, masks=None, prefix='adaboost', mask_negative_ratio=0
         optimizer_kwargs={
             'lr': 1e-3,
         },
-        undersample_kwargs={
-            'masks': masks,
-        },
         batch_size=6,  # TODO 6
     )
     pipeline.model.freeze_lm(freeze_all=False, freeze_layer_count=30)
 
+    print('Apply undersample')
+    masks = build_mask_from_prefix_me(
+        masks=pipeline.dataset.masks,
+        prefix=prefix,
+        mask_negative_ratio=mask_negative_ratio,
+        valid_fold=pipeline.dataset.valid_fold()
+    )
+    pipeline.apply_undersample(masks=masks)
+
     print('Training..')
     CSV_PATH = f'logs/{prefix}.csv'
-    train_record, state_dict = pipeline.train_until_fit(
+    train_record, train_preds, valid_preds, test_preds = pipeline.train_until_fit(
         patience=5,  # TODO 5
-        return_state_dict=True,
+        return_preds=True,
         use_dynamic_threshold=False
     )
     df = read_initial_csv(CSV_PATH)
@@ -106,62 +129,21 @@ def adaboost_iter(iter_num, masks=None, prefix='adaboost', mask_negative_ratio=0
 
     print('Train Done')
 
-    # load the best model
-    print('Loading best model')
-    pipeline.task.load_state_dict(state_dict)
-    pipeline.task.eval()
-
     # save prediction of current round
     print('Saving prediction')
-    df_train = create_single_pred_dataframe(pipeline, pipeline.train_set)
-    df_train.to_csv(f'preds/{prefix}_{iter_num:02d}_train.csv', index=False)
-
-    df_valid = create_single_pred_dataframe(pipeline, pipeline.valid_set)
-    df_valid.to_csv(f'preds/{prefix}_{iter_num:02d}_valid.csv', index=False)
-
-    df_test = create_single_pred_dataframe(pipeline, pipeline.test_set)
-    df_test.to_csv(f'preds/{prefix}_{iter_num:02d}_test.csv', index=False)
-
-    # Get the prediction of all residues with negative labels
-    print('Getting prediciton for negative labels')
-    if not masks:
-        masks = pipeline.dataset.masks
-
-    # fill all the masks with True
-    for i in range(len(masks)):
-        masks[i].fill_(True)
-
-    all_train_pred_files = get_train_preds_with_prefixes(prefix)
-    df_train_pred = create_mean_ensemble_pred_dataframe(all_train_pred_files)
-    negative_df = df_train_pred[df_train_pred['target'] == 0]
-
-    confident_negatives = negative_df.sort_values(
-        by=['pred'])[:int(len(negative_df) * mask_negative_ratio)]
-
-    print(confident_negatives)
-
-    # for elem in negative_labels[:confident_negatives]:
-    #     masks[elem['protein_index']][elem['resudie_index']] = False
-    print(confident_negatives.info())
-    for index, row in confident_negatives.iterrows():
-        index_in_dataset = int(row['protein_index'])
-        if row['protein_index'] >= pipeline.dataset.valid_fold()[0]:
-            index_in_dataset += len(pipeline.dataset.valid_fold())
-        masks[index_in_dataset][int(row['residue_index'])] = False
-
-    return masks
+    train_preds.to_csv(f'preds/{prefix}_{iter_num:02d}_train.csv', index=False)
+    valid_preds.to_csv(f'preds/{prefix}_{iter_num:02d}_valid.csv', index=False)
+    test_preds.to_csv(f'preds/{prefix}_{iter_num:02d}_test.csv', index=False)
 
 
-def main(prefix, mask_negative_ratio):
-    masks = None
-    for i in range(30):
+def main(prefix, mask_negative_ratio, max_iter):
+    train_preds = get_train_preds_with_prefix(prefix)
+    print(f'train_preds: {train_preds}')
+    cur_len = len(get_train_preds_with_prefix(prefix))
+    for i in range(cur_len, max_iter):
         print(f'Round {i}')
-        masks = adaboost_iter(
-            i, masks, prefix=prefix, mask_negative_ratio=mask_negative_ratio)
-        masks_zero_count = 0
-        for mask in masks:
-            masks_zero_count += (mask == False).sum().item()
-        print(f'Round {i} Done. {masks_zero_count} / 86682 residues masked')
+        adaboost_iter(i, prefix=prefix,
+                      mask_negative_ratio=mask_negative_ratio)
 
 
 if __name__ == "__main__":
@@ -170,6 +152,12 @@ if __name__ == "__main__":
     parser.add_argument('--gpu', type=int, default=0)
     parser.add_argument('--prefix', type=str, default='ab_me')
     parser.add_argument('--mask_negative_ratio', type=float, default=0.5)
+    parser.add_argument('--max_iter', type=int, default=50)
     args = parser.parse_args()
     GPU = args.gpu
-    main(prefix=args.prefix, mask_negative_ratio=args.mask_negative_ratio)
+    prefix = f'{args.prefix}_{int(args.mask_negative_ratio*100)}'
+    print(f'Use prefix {prefix}')
+    main(prefix=prefix,
+         mask_negative_ratio=args.mask_negative_ratio,
+         max_iter=args.max_iter
+         )
