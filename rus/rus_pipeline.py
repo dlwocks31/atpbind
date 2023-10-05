@@ -461,15 +461,29 @@ parameter_by_version = {
         'lm_type': 'esm-t12',
         'lr_half_epoch': 0,
         'use_rus': False,
-        'bert_freeze_layer': 9, 
+        'bert_freeze_layer': 0, 
     },
     40: {
         **esm_base_param,
         'lm_type': 'esm-t6',
         'lr_half_epoch': 0,
         'use_rus': False,
-        'bert_freeze_layer': 3, 
-    }
+        'bert_freeze_layer': 0, 
+    },
+    41: {
+        **esm_base_param,
+        'lm_type': 'esm-t12',
+        'lr_half_epoch': 0,
+        'use_rus': False,
+        'bert_freeze_layer': 6,
+    },
+    42: {
+        **esm_base_param,
+        'lm_type': 'esm-t12',
+        'lr_half_epoch': 0,
+        'use_rus': False,
+        'bert_freeze_layer': 9,
+    },
 }
 
 
