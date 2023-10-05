@@ -78,7 +78,7 @@ METRICS_USING = ("sensitivity", "specificity", "accuracy",
 
 class Pipeline:
     possible_models = ['bert', 'gearnet', 'lm-gearnet',
-                       'cnn', 'esm-t33', 'esm-t36', 'esm-t48']
+                       'cnn', 'esm-t6', 'esm-t12', 'esm-t30', 'esm-t33', 'esm-t36', 'esm-t48']
     possible_datasets = ['atpbind', 'atpbind3d', 'atpbind3d-minimal']
     threshold = 0
 
@@ -214,7 +214,7 @@ class Pipeline:
                 self.model = LMGearNetModel(**model_kwargs)
             elif model == 'cnn':
                 self.model = models.ProteinCNN(**model_kwargs)
-            elif model == 'esm-t33' or model == 'esm-t36' or model == 'esm-t48':
+            elif model.startswith('esm'):
                 self.model = EsmWrapModel(model_type=model, **model_kwargs)
             # pre built model, eg LoraModel. I wonder wheter there is better way to check this
             elif isinstance(model, torch.nn.Module):

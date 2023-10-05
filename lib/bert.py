@@ -4,6 +4,7 @@ from transformers import BertModel, BertTokenizer, AutoTokenizer, EsmModel
 from torchdrug import core
 import torch
 
+
 def _freeze_bert(
     bert_model: BertModel, freeze_bert=True, freeze_layer_count=-1
 ):
@@ -41,7 +42,7 @@ class BertWrapModel(torch.nn.Module, core.Configurable):
             "Rostlab/prot_bert", do_lower_case=False)
         self.bert_model = BertModel.from_pretrained(
             "Rostlab/prot_bert").to(f'cuda:{GPU}')
-        _freeze_bert(self.bert_model, 
+        _freeze_bert(self.bert_model,
                      freeze_bert=freeze_bert,
                      freeze_layer_count=freeze_layer_count)
         self.input_dim = 21
@@ -55,12 +56,12 @@ class BertWrapModel(torch.nn.Module, core.Configurable):
         encoded_input = self.bert_tokenizer(
             input, return_tensors='pt', padding=True).to('cuda')
         embedding_rpr = self.bert_model(**encoded_input)
-        
+
         residue_feature = []
         for i, emb in enumerate(embedding_rpr.last_hidden_state):
             # skip residue feature for [CLS] and [SEP], since they are not in the original sequence
             residue_feature.append(emb[1:1+input_len[i]])
-        
+
         x = torch.cat(residue_feature)
 
         return {"residue_feature": x}
@@ -75,6 +76,13 @@ class EsmWrapModel(torch.nn.Module, core.Configurable):
             name = "facebook/esm2_t36_3B_UR50D"
         elif model_type == 'esm-t48':
             name = "facebook/esm2_t48_15B_UR50D"
+        elif model_type == 'esm-t30':
+            name = "facebook/esm2_t30_150M_UR50D"
+        elif model_type == 'esm-t12':
+            name = "facebook/esm1_t12_35M_UR50D"
+        elif model_type == 'esm-t6':
+            name = "facebook/esm1_t6_8M_UR50D"      
+            
         self.esm_tokenizer = AutoTokenizer.from_pretrained(name)
         self.esm_model = EsmModel.from_pretrained(name).to(f'cuda:{gpu}')
         _freeze_bert(self.esm_model,
@@ -91,12 +99,12 @@ class EsmWrapModel(torch.nn.Module, core.Configurable):
         encoded_input = self.esm_tokenizer(
             input, return_tensors='pt', padding=True).to('cuda')
         embedding_rpr = self.esm_model(**encoded_input)
-        
+
         residue_feature = []
         for i, emb in enumerate(embedding_rpr.last_hidden_state):
             # skip residue feature for [CLS] and [SEP], since they are not in the original sequence
             residue_feature.append(emb[1:1+input_len[i]])
-        
+
         x = torch.cat(residue_feature)
 
         return {"residue_feature": x}

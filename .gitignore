@@ -180,3 +180,6 @@ data/weight/**
 _playground/
 *.pth
 _debug.py
+
+
+preds/*

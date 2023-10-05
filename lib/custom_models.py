@@ -14,6 +14,9 @@ def separate_alphabets(text):
 
 lm_type_map = {
     'bert': (BertModel, BertTokenizer, "Rostlab/prot_bert"),
+    'esm-t6': (EsmModel, AutoTokenizer, "facebook/esm2_t6_8M_UR50D"),
+    'esm-t12': (EsmModel, AutoTokenizer, "facebook/esm2_t12_35M_UR50D"),
+    'esm-t30': (EsmModel, AutoTokenizer, "facebook/esm2_t30_150M_UR50D"),
     'esm-t33': (EsmModel, AutoTokenizer, "facebook/esm2_t33_650M_UR50D"),
     'esm-t36': (EsmModel, AutoTokenizer, "facebook/esm2_t36_3B_UR50D"),
 }
