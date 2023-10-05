@@ -77,6 +77,22 @@ class NodePropertyPrediction(tasks.Task, core.Configurable):
         if self.normalization:
             pred = pred * self.std + self.mean
         return pred
+    def simple_preprocess(self):
+        self.view = "residue"
+        mean = torch.tensor(0.0)
+        std = torch.tensor(1.0)
+        num_class = 1
+
+        self.register_buffer("mean", torch.as_tensor(mean, dtype=torch.float))
+        self.register_buffer("std", torch.as_tensor(std, dtype=torch.float))
+        self.num_class = self.num_class or num_class
+
+        if hasattr(self.model, "node_output_dim"):
+            model_output_dim = self.model.node_output_dim
+        else:
+            model_output_dim = self.model.output_dim
+        hidden_dims = [model_output_dim] * (self.num_mlp_layer - 1)
+        self.mlp = layers.MLP(model_output_dim, hidden_dims + [self.num_class])
 
     def target(self, batch):
         size = batch["graph"].num_nodes if self.view in ["node", "atom"] else batch["graph"].num_residues

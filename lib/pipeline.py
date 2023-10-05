@@ -223,7 +223,7 @@ class Pipeline:
     def train(self, num_epoch):
         return self.solver.train(num_epoch=num_epoch)
 
-    def train_until_fit(self, patience=1, early_stop_metric='valid_mcc', return_preds=False, use_dynamic_threshold=True):
+    def train_until_fit(self, patience=1, early_stop_metric='valid_mcc', return_preds=False, return_state_dict=False, use_dynamic_threshold=True):
         if early_stop_metric not in ['valid_mcc', 'valid_bce']:
             raise ValueError('early_stop_metric must be one of {}'.format(
                 ['valid_mcc', 'valid_bce']))
@@ -232,6 +232,7 @@ class Pipeline:
         train_preds = None
         valid_preds = None
         test_preds = None
+        state_dict = None
         best_metric = -1 if early_stop_metric == 'valid_mcc' else 1e10
 
         last_time = datetime.now()
@@ -257,14 +258,18 @@ class Pipeline:
                 # early stop
                 should_replace_best_metric = cur_result[
                     'valid_mcc'] > best_metric if early_stop_metric == 'valid_mcc' else cur_result['valid_bce'] < best_metric
-                if return_preds and should_replace_best_metric:
-                    best_metric = cur_result[early_stop_metric]
-                    train_preds = create_single_pred_dataframe(
-                        self, self.train_set)
-                    valid_preds = create_single_pred_dataframe(
-                        self, self.valid_set)
-                    test_preds = create_single_pred_dataframe(
-                        self, self.test_set)
+                if should_replace_best_metric:
+                    if return_preds:
+                        best_metric = cur_result[early_stop_metric]
+                        train_preds = create_single_pred_dataframe(
+                            self, self.train_set)
+                        valid_preds = create_single_pred_dataframe(
+                            self, self.valid_set)
+                        test_preds = create_single_pred_dataframe(
+                            self, self.test_set)
+                    elif return_state_dict:
+                        state_dict = deepcopy(self.task.state_dict())
+                        
                 best_index = np.argmax([record[early_stop_metric] for record in train_record]) if early_stop_metric == 'valid_mcc' else np.argmin(
                     [record[early_stop_metric] for record in train_record])
                 if best_index < len(train_record) - patience:
@@ -276,6 +281,8 @@ class Pipeline:
                 last_time = cur_time
         if return_preds:
             return (train_record, train_preds, valid_preds, test_preds)
+        elif return_state_dict:
+            return (train_record, state_dict)
         else:
             return train_record
 

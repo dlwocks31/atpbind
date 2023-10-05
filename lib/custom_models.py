@@ -20,6 +20,7 @@ lm_type_map = {
     'esm-t33': (EsmModel, AutoTokenizer, "facebook/esm2_t33_650M_UR50D"),
     'esm-t36': (EsmModel, AutoTokenizer, "facebook/esm2_t36_3B_UR50D"),
 }
+
 class LMGearNetModel(torch.nn.Module, core.Configurable):
     def __init__(self, 
                  gpu,
