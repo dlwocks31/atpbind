@@ -133,12 +133,12 @@ class GearNetWrapModel(torch.nn.Module, core.Configurable):
                 for param in layer.parameters():
                     param.requires_grad = False
 
-    def __init__(self, input_dim, hidden_dims, gpu, graph_sequential_max_distance=3):
+    def __init__(self, input_dim, hidden_dims, gpu):
         super().__init__()
         self.gpu = gpu
         self.model = models.GearNet(
-            num_relation=7 + (graph_sequential_max_distance - 2) * 2,
-            edge_input_dim=59 + (graph_sequential_max_distance - 2) * 2,
+            num_relation=7,
+            edge_input_dim=59,
             num_angle_bin=8,
             batch_norm=True,
             concat_hidden=True,

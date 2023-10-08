@@ -97,7 +97,7 @@ def single_run(
     model_kwargs={},
     undersample_kwargs={}, 
     pipeline_before_train_fn=None, 
-    patience=1,
+    patience=5,
 ):
     pipeline = Pipeline(
         dataset='atpbind3d',
@@ -160,6 +160,7 @@ def main(model_key, valid_fold):
                      valid_fold=valid_fold,
                      result=result)
     else:
+        # run 100 single_run, and save result to intermediate
         pass
 
 
@@ -172,7 +173,9 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     GPU = args.gpu
-
+    print(f'Using GPU {GPU}')
+    print(f'Running model keys {args.model_keys}')
+    print(f'Running valid folds {args.valid_folds}')
     for model_key in args.model_keys:
         for valid_fold in args.valid_folds:
             print(f'Running {model_key} fold {valid_fold}')
