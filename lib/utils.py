@@ -1,5 +1,6 @@
 import torch
 from statistics import mean, stdev
+import pandas as pd
 
 def dict_tensor_to_num(d):
     return {k: v.item() if isinstance(v, torch.Tensor) else v
@@ -15,3 +16,10 @@ def statistics_per_key(list_of_dict):
     for key in keys:
         result[key] = [mean([i[key] for i in list_of_dict]), stdev([i[key] for i in list_of_dict]) if len(list_of_dict) >= 2 else -1, len(list_of_dict)]
     return result
+
+def read_initial_csv(path):
+    try:
+        return pd.read_csv(path)
+    except (FileNotFoundError, IndexError):
+        # File does not exist, or it is empty
+        return pd.DataFrame()

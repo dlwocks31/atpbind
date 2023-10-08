@@ -38,10 +38,11 @@ def _freeze_bert(
 class BertWrapModel(torch.nn.Module, core.Configurable):
     def __init__(self, gpu, freeze_bert, freeze_layer_count):
         super().__init__()
+        self.gpu = gpu
         self.bert_tokenizer = BertTokenizer.from_pretrained(
             "Rostlab/prot_bert", do_lower_case=False)
         self.bert_model = BertModel.from_pretrained(
-            "Rostlab/prot_bert").to(f'cuda:{GPU}')
+            "Rostlab/prot_bert").to(f'cuda:{gpu}')
         _freeze_bert(self.bert_model,
                      freeze_bert=freeze_bert,
                      freeze_layer_count=freeze_layer_count)
@@ -54,7 +55,7 @@ class BertWrapModel(torch.nn.Module, core.Configurable):
 
         # At large batch size, tokenization becomes the bottleneck
         encoded_input = self.bert_tokenizer(
-            input, return_tensors='pt', padding=True).to('cuda')
+            input, return_tensors='pt', padding=True).to(f'cuda:{self.gpu}')
         embedding_rpr = self.bert_model(**encoded_input)
 
         residue_feature = []
@@ -84,6 +85,7 @@ class EsmWrapModel(torch.nn.Module, core.Configurable):
             name = "facebook/esm1_t6_8M_UR50D"      
             
         self.esm_tokenizer = AutoTokenizer.from_pretrained(name)
+        self.gpu = gpu
         self.esm_model = EsmModel.from_pretrained(name).to(f'cuda:{gpu}')
         _freeze_bert(self.esm_model,
                      freeze_bert=freeze_esm,
@@ -97,7 +99,7 @@ class EsmWrapModel(torch.nn.Module, core.Configurable):
 
         # At large batch size, tokenization becomes the bottleneck
         encoded_input = self.esm_tokenizer(
-            input, return_tensors='pt', padding=True).to('cuda')
+            input, return_tensors='pt', padding=True).to(f'cuda:{self.gpu}')
         embedding_rpr = self.esm_model(**encoded_input)
 
         residue_feature = []

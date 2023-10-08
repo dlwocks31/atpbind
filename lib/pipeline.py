@@ -254,7 +254,10 @@ class Pipeline:
                         split='valid', threshold=0)['mcc']
                 cur_result = round_dict(cur_result, 4)
                 train_record.append(cur_result)
-
+                # logging
+                cur_time = datetime.now()
+                print(f'{format_timedelta(cur_time - last_time)} {cur_result}')
+                last_time = cur_time
                 # early stop
                 should_replace_best_metric = cur_result[
                     'valid_mcc'] > best_metric if early_stop_metric == 'valid_mcc' else cur_result['valid_bce'] < best_metric
@@ -275,10 +278,7 @@ class Pipeline:
                 if best_index < len(train_record) - patience:
                     break
 
-                # logging
-                cur_time = datetime.now()
-                print(f'{format_timedelta(cur_time - last_time)} {cur_result}')
-                last_time = cur_time
+
         if return_preds:
             return (train_record, train_preds, valid_preds, test_preds)
         elif return_state_dict:
