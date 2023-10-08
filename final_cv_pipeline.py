@@ -3,7 +3,7 @@ import pandas as pd
 from torchdrug import utils, data
 import os
 
-from lib.utils import read_initial_csv
+from lib.utils import generate_mean_ensemble_metrics, read_initial_csv
 GPU = 0
 
 ALL_PARAMS = {
@@ -59,15 +59,29 @@ ALL_PARAMS = {
     },
     'bert-gearnet-ensemble': {
         'ensemble': True,
+
+        
     },
     'esm-33-gearnet-ensemble': {
         'ensemble': True,
+        'model': 'lm-gearnet',
+        'model_kwargs': {
+            'lm_type': 'esm-t33',
+            'gearnet_hidden_dim_size': 512,
+            'gearnet_hidden_dim_count': 4,
+        },
+        'pipeline_before_train_fn': lambda pipeline: pipeline.model.freeze_lm(
+            freeze_all=False,
+            freeze_layer_count=30,
+        ),
     },
     'esm-33-gearnet-ensemble-rus': {
         'ensemble': True,
     },
     'esm-33-gearnet-resiboost': {
         'ensemble': True,
+        
+        # probably pipeline_before train should receive previous result, so that we can build mask and apply undersample
     },
 }
 
@@ -146,8 +160,24 @@ def write_result(model_key, valid_fold, result):
         }
     ])])
     record_df.to_csv('result_cv/result_cv.csv', index=False)
-    
-    
+
+def write_result_intermediate(model_key, valid_fold, result, iter):
+    folder = f'result_cv/{model_key}/fold_{valid_fold}/intermediate'
+    os.makedirs(folder, exist_ok=True)
+    result['df_train'].to_csv(f'{folder}/train_{iter}.csv', index=False)
+    result['df_valid'].to_csv(f'{folder}/valid_{iter}.csv', index=False)
+    result['df_test'].to_csv(f'{folder}/test_{iter}.csv', index=False)
+
+def write_result_ensemble(model_key, valid_fold, metric):
+    record_df = read_initial_csv('result_cv/result_cv.csv')
+    record_df = pd.concat([record_df, pd.DataFrame([
+        {
+            'model_key': model_key,
+            'valid_fold': valid_fold,
+            **metric
+        }
+    ])])
+    record_df.to_csv('result_cv/result_cv.csv', index=False)
 
 def main(model_key, valid_fold):
     model = ALL_PARAMS[model_key]
@@ -160,8 +190,34 @@ def main(model_key, valid_fold):
                      valid_fold=valid_fold,
                      result=result)
     else:
-        # run 100 single_run, and save result to intermediate
-        pass
+        results = []
+        for iter in range(10): # after stable, increase to 10
+            result = single_run(
+                valid_fold_num=valid_fold,
+                **{k: model[k] for k in model if k != 'ensemble'},
+            )
+            results.append(result)
+            write_result_intermediate(
+                model_key=model_key,
+                valid_fold=valid_fold,
+                result=result,
+                iter=iter,
+            )
+        # do mean ensemble
+        final_df = results[0]['df_test'].rename(columns={'pred': 'pred_0'})
+        for i in range(1, len(results)):
+            final_df[f'pred_{i}'] = results[i]['df_test']['pred']
+        final_df['pred'] = final_df[[f'pred_{i}' for i in range(len(results))]].mean(axis=1)
+        final_df.to_csv(f'result_cv/{model_key}/fold_{valid_fold}/test.csv', index=False)
+        # aggregate record to result_cv/result_cv.csv
+        me_metric = generate_mean_ensemble_metrics(final_df)
+        write_result_ensemble(
+            model_key=model_key,
+            valid_fold=valid_fold,
+            metric=me_metric
+        )
+        
+                
 
 
 if __name__ == '__main__':
