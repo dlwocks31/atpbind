@@ -3,7 +3,12 @@
 from transformers import BertModel, BertTokenizer, AutoTokenizer, EsmModel
 from torchdrug import core
 import torch
-
+def separate_alphabets(text):
+    separated_text = ""
+    for char in text:
+        if char.isalpha():
+            separated_text += char + " "
+    return separated_text.strip()
 
 def _freeze_bert(
     bert_model: BertModel, freeze_bert=True, freeze_layer_count=-1
@@ -50,9 +55,9 @@ class BertWrapModel(torch.nn.Module, core.Configurable):
         self.output_dim = self.bert_model.config.hidden_size
 
     def forward(self, graph, _, all_loss=None, metric=None):
-        input = [seq.replace('.', ' ') for seq in graph.to_sequence()]
+        input = [separate_alphabets(seq) for seq in graph.to_sequence()]
         input_len = [len(seq.replace(' ', '')) for seq in input]
-
+        # print(f'bert graph: {graph}')
         # At large batch size, tokenization becomes the bottleneck
         encoded_input = self.bert_tokenizer(
             input, return_tensors='pt', padding=True).to(f'cuda:{self.gpu}')
@@ -63,8 +68,9 @@ class BertWrapModel(torch.nn.Module, core.Configurable):
             # skip residue feature for [CLS] and [SEP], since they are not in the original sequence
             residue_feature.append(emb[1:1+input_len[i]])
 
+        # print(f'bert residue_feature shape: {residue_feature[0].shape}, len: {len(residue_feature)}')
         x = torch.cat(residue_feature)
-
+        # print(f'bert x shape: {x.shape}')
         return {"residue_feature": x}
 
 
@@ -96,7 +102,7 @@ class EsmWrapModel(torch.nn.Module, core.Configurable):
     def forward(self, graph, _, all_loss=None, metric=None):
         input = [seq.replace('.', ' ') for seq in graph.to_sequence()]
         input_len = [len(seq.replace(' ', '')) for seq in input]
-
+        # print(f'esm graph: {graph}')
         # At large batch size, tokenization becomes the bottleneck
         encoded_input = self.esm_tokenizer(
             input, return_tensors='pt', padding=True).to(f'cuda:{self.gpu}')
@@ -106,7 +112,7 @@ class EsmWrapModel(torch.nn.Module, core.Configurable):
         for i, emb in enumerate(embedding_rpr.last_hidden_state):
             # skip residue feature for [CLS] and [SEP], since they are not in the original sequence
             residue_feature.append(emb[1:1+input_len[i]])
-
+        # print(f'esm residue_feature shape: {residue_feature[0].shape}, len: {len(residue_feature)}')
         x = torch.cat(residue_feature)
-
+        # print(f'esm x shape: {x.shape}')
         return {"residue_feature": x}
