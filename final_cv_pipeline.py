@@ -59,7 +59,6 @@ ALL_PARAMS = {
     'esm-t33': {
         'ensemble': False,
         'model': 'esm-t33',
-        'batch_size': 8,
         'model_kwargs': {
             'freeze_esm': False,
             'freeze_layer_count': 30,  
@@ -68,7 +67,6 @@ ALL_PARAMS = {
     'bert': {
         'ensemble': False,
         'model': 'bert',
-        'batch_size': 8,
         'model_kwargs': {
             'freeze_bert': False,
             'freeze_layer_count': 27,
@@ -77,7 +75,6 @@ ALL_PARAMS = {
     'gearnet': {
         'ensemble': False,
         'model': 'gearnet',
-        'batch_size': 8,
         'model_kwargs': {
             'input_dim': 21,
             'hidden_dims': [512] * 4,
@@ -86,7 +83,6 @@ ALL_PARAMS = {
     'bert-gearnet': {
         'ensemble': False,
         'model': 'lm-gearnet',
-        'batch_size': 8,
         'model_kwargs': {
             'lm_type': 'bert',
             'gearnet_hidden_dim_size': 512,
@@ -100,7 +96,6 @@ ALL_PARAMS = {
     'esm-33-gearnet': {
         'ensemble': False,
         'model': 'lm-gearnet',
-        'batch_size': 8,
         'model_kwargs': {
             'lm_type': 'esm-t33',
             'gearnet_hidden_dim_size': 512,
@@ -114,7 +109,6 @@ ALL_PARAMS = {
     'bert-gearnet-ensemble': {
         'ensemble': True,
         'model': 'lm-gearnet',
-        'batch_size': 8,
         'model_kwargs': {
             'lm_type': 'bert',
             'gearnet_hidden_dim_size': 512,
@@ -128,7 +122,6 @@ ALL_PARAMS = {
     'esm-33-gearnet-ensemble': {
         'ensemble': True,
         'model': 'lm-gearnet',
-        'batch_size': 8,
         'model_kwargs': {
             'lm_type': 'esm-t33',
             'gearnet_hidden_dim_size': 512,
@@ -142,7 +135,6 @@ ALL_PARAMS = {
     'esm-33-gearnet-ensemble-rus': {
         'ensemble': True,
         'model': 'lm-gearnet',
-        'batch_size': 8,
         'model_kwargs': {
             'lm_type': 'esm-t33',
             'gearnet_hidden_dim_size': 512,
@@ -153,7 +145,6 @@ ALL_PARAMS = {
     'esm-33-gearnet-resiboost': {
         'ensemble': True,
         'model': 'lm-gearnet',
-        'batch_size': 8,
         'model_kwargs': {
             'lm_type': 'esm-t33',
             'gearnet_hidden_dim_size': 512,
@@ -184,7 +175,7 @@ def create_single_pred_dataframe(pipeline, dataset):
 
     return df
 
-DEBUG = True
+DEBUG = False
 def single_run(
     valid_fold_num,
     model,
@@ -192,7 +183,7 @@ def single_run(
     undersample_kwargs={}, 
     pipeline_before_train_fn=None,
     prev_result=None,
-    batch_size=1,
+    batch_size=4,
     patience=1 if DEBUG else 5,
 ):
     pipeline = Pipeline(
