@@ -2,14 +2,64 @@ from lib.pipeline import Pipeline
 import pandas as pd
 from torchdrug import utils, data
 import os
+import torch
+import inspect
 
 from lib.utils import generate_mean_ensemble_metrics, read_initial_csv
 GPU = 0
 
+NEGATIVE_USE_RATIO = 0.25
+
+def rus_preprocess(pipeline):
+    # freeze lm
+    pipeline.model.freeze_lm(
+        freeze_all=False,
+        freeze_layer_count=30,
+    )
+    # build random mask
+    masks = pipeline.dataset.masks
+    for i in range(len(masks)):
+        positive_mask = torch.tensor(pipeline.dataset.targets['binding'][i]) == 1
+        negative_mask = torch.rand(len(masks[i])) < NEGATIVE_USE_RATIO
+        assert(len(positive_mask) == len(negative_mask))
+        mask = positive_mask | negative_mask
+        masks[i] = mask
+    pipeline.apply_undersample(masks=masks)
+
+def resiboost_preprocess(pipeline, prev_results):
+    # freeze lm
+    pipeline.model.freeze_lm(
+        freeze_all=False,
+        freeze_layer_count=30,
+    )
+    # build mask
+    if not prev_results:
+        return
+    masks = pipeline.dataset.masks
+    df_trains = [r['df_train'] for r in prev_results]
+    final_df = df_trains[0].rename(columns={'pred': 'pred_0'})
+    for i in range(1, len(df_trains)):
+        final_df[f'pred_{i}'] = df_trains[i]['pred']
+    final_df['pred'] = final_df[[f'pred_{i}' for i in range(len(df_trains))]].mean(axis=1)
+    final_df.reset_index(inplace=True)
+    negative_df = final_df[final_df['target'] == 0]
+    
+    confident_negative_df = negative_df.sort_values(
+        by=['pred'])[:int(len(negative_df) * (1-NEGATIVE_USE_RATIO))]
+    
+    for _, row in confident_negative_df.iterrows():
+        protein_index_in_dataset = int(row['protein_index'])
+        if row['protein_index'] >= pipeline.dataset.valid_fold()[0]:
+            protein_index_in_dataset += len(pipeline.dataset.valid_fold())
+        masks[protein_index_in_dataset][int(row['residue_index'])] = False
+    
+    pipeline.apply_undersample(masks=masks)
+    
 ALL_PARAMS = {
     'esm-t33': {
         'ensemble': False,
         'model': 'esm-t33',
+        'batch_size': 8,
         'model_kwargs': {
             'freeze_esm': False,
             'freeze_layer_count': 30,  
@@ -18,6 +68,7 @@ ALL_PARAMS = {
     'bert': {
         'ensemble': False,
         'model': 'bert',
+        'batch_size': 8,
         'model_kwargs': {
             'freeze_bert': False,
             'freeze_layer_count': 27,
@@ -26,6 +77,7 @@ ALL_PARAMS = {
     'gearnet': {
         'ensemble': False,
         'model': 'gearnet',
+        'batch_size': 8,
         'model_kwargs': {
             'input_dim': 21,
             'hidden_dims': [512] * 4,
@@ -34,6 +86,7 @@ ALL_PARAMS = {
     'bert-gearnet': {
         'ensemble': False,
         'model': 'lm-gearnet',
+        'batch_size': 8,
         'model_kwargs': {
             'lm_type': 'bert',
             'gearnet_hidden_dim_size': 512,
@@ -47,6 +100,7 @@ ALL_PARAMS = {
     'esm-33-gearnet': {
         'ensemble': False,
         'model': 'lm-gearnet',
+        'batch_size': 8,
         'model_kwargs': {
             'lm_type': 'esm-t33',
             'gearnet_hidden_dim_size': 512,
@@ -59,12 +113,22 @@ ALL_PARAMS = {
     },
     'bert-gearnet-ensemble': {
         'ensemble': True,
-
-        
+        'model': 'lm-gearnet',
+        'batch_size': 8,
+        'model_kwargs': {
+            'lm_type': 'bert',
+            'gearnet_hidden_dim_size': 512,
+            'gearnet_hidden_dim_count': 4,
+        },
+        'pipeline_before_train_fn': lambda pipeline: pipeline.model.freeze_lm(
+            freeze_all=False,
+            freeze_layer_count=30,
+        ),
     },
     'esm-33-gearnet-ensemble': {
         'ensemble': True,
         'model': 'lm-gearnet',
+        'batch_size': 8,
         'model_kwargs': {
             'lm_type': 'esm-t33',
             'gearnet_hidden_dim_size': 512,
@@ -77,10 +141,25 @@ ALL_PARAMS = {
     },
     'esm-33-gearnet-ensemble-rus': {
         'ensemble': True,
+        'model': 'lm-gearnet',
+        'batch_size': 8,
+        'model_kwargs': {
+            'lm_type': 'esm-t33',
+            'gearnet_hidden_dim_size': 512,
+            'gearnet_hidden_dim_count': 4,
+        },
+        'pipeline_before_train_fn': rus_preprocess,
     },
     'esm-33-gearnet-resiboost': {
         'ensemble': True,
-        
+        'model': 'lm-gearnet',
+        'batch_size': 8,
+        'model_kwargs': {
+            'lm_type': 'esm-t33',
+            'gearnet_hidden_dim_size': 512,
+            'gearnet_hidden_dim_count': 4,
+        },
+        'pipeline_before_train_fn': resiboost_preprocess,
         # probably pipeline_before train should receive previous result, so that we can build mask and apply undersample
     },
 }
@@ -105,16 +184,19 @@ def create_single_pred_dataframe(pipeline, dataset):
 
     return df
 
+DEBUG = True
 def single_run(
     valid_fold_num,
     model,
     model_kwargs={},
     undersample_kwargs={}, 
-    pipeline_before_train_fn=None, 
-    patience=5,
+    pipeline_before_train_fn=None,
+    prev_result=None,
+    batch_size=1,
+    patience=1 if DEBUG else 5,
 ):
     pipeline = Pipeline(
-        dataset='atpbind3d',
+        dataset='atpbind3d-minimal' if DEBUG else 'atpbind3d',
         model=model,
         gpus=[GPU],
         model_kwargs={
@@ -123,10 +205,15 @@ def single_run(
         },
         undersample_kwargs=undersample_kwargs,
         valid_fold_num=valid_fold_num,
+        batch_size=batch_size,
     )
     
     if pipeline_before_train_fn:
-        pipeline_before_train_fn(pipeline)
+        params = inspect.signature(pipeline_before_train_fn).parameters
+        if len(params) == 1:
+            pipeline_before_train_fn(pipeline)
+        else: # used by resiboost, which need previous state
+            pipeline_before_train_fn(pipeline, prev_result)
     
     train_record, state_dict = pipeline.train_until_fit(patience=patience, return_state_dict=True)
     
@@ -164,9 +251,20 @@ def write_result(model_key, valid_fold, result):
 def write_result_intermediate(model_key, valid_fold, result, iter):
     folder = f'result_cv/{model_key}/fold_{valid_fold}/intermediate'
     os.makedirs(folder, exist_ok=True)
-    result['df_train'].to_csv(f'{folder}/train_{iter}.csv', index=False)
-    result['df_valid'].to_csv(f'{folder}/valid_{iter}.csv', index=False)
-    result['df_test'].to_csv(f'{folder}/test_{iter}.csv', index=False)
+    result['df_train'].to_csv(f'{folder}/iter_{iter}_train.csv', index=False)
+    result['df_valid'].to_csv(f'{folder}/iter_{iter}_valid.csv', index=False)
+    result['df_test'].to_csv(f'{folder}/iter_{iter}_test.csv', index=False)
+    
+    record_df = read_initial_csv(f'{folder}/agg_record.csv')
+    record_df = pd.concat([record_df, pd.DataFrame([
+        {
+            'model_key': model_key,
+            'valid_fold': valid_fold,
+            'iter': iter,
+            **result['record']
+        }
+    ])])
+    record_df.to_csv(f'{folder}/agg_record.csv', index=False)
 
 def write_result_ensemble(model_key, valid_fold, metric):
     record_df = read_initial_csv('result_cv/result_cv.csv')
@@ -195,6 +293,7 @@ def main(model_key, valid_fold):
             result = single_run(
                 valid_fold_num=valid_fold,
                 **{k: model[k] for k in model if k != 'ensemble'},
+                prev_result=results,
             )
             results.append(result)
             write_result_intermediate(

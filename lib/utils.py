@@ -63,3 +63,10 @@ def generate_mean_ensemble_metrics(df, threshold=0):
         "precision": precision,
         "mcc": mcc,
     }
+    
+def aggregate_pred_dataframe(files):
+    dfs = [pd.read_csv(f) for f in files]
+    final_df = dfs[0].rename(columns={'pred': 'pred_0'})
+    for i in range(1, len(dfs)):
+        final_df[f'pred_{i}'] = dfs[i]['pred']
+    return final_df.reset_index()
