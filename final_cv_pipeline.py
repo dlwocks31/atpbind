@@ -69,7 +69,7 @@ ALL_PARAMS = {
         'model': 'bert',
         'model_kwargs': {
             'freeze_bert': False,
-            'freeze_layer_count': 27,
+            'freeze_layer_count': 29,
         },
     },
     'gearnet': {
@@ -90,7 +90,7 @@ ALL_PARAMS = {
         },
         'pipeline_before_train_fn': lambda pipeline: pipeline.model.freeze_lm(
             freeze_all=False,
-            freeze_layer_count=27,
+            freeze_layer_count=29,
         ),
     },
     'esm-33-gearnet': {
@@ -116,7 +116,7 @@ ALL_PARAMS = {
         },
         'pipeline_before_train_fn': lambda pipeline: pipeline.model.freeze_lm(
             freeze_all=False,
-            freeze_layer_count=30,
+            freeze_layer_count=29,
         ),
     },
     'esm-33-gearnet-ensemble': {
@@ -280,7 +280,7 @@ def main(model_key, valid_fold):
                      result=result)
     else:
         results = []
-        for iter in range(10): # after stable, increase to 10
+        for iter in range(10): # after stable, increase to 100
             result = single_run(
                 valid_fold_num=valid_fold,
                 **{k: model[k] for k in model if k != 'ensemble'},
