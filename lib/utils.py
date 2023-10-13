@@ -2,6 +2,7 @@ from sklearn.metrics import confusion_matrix
 import torch
 from statistics import mean, stdev
 import pandas as pd
+import numpy as np
 
 def dict_tensor_to_num(d):
     return {k: v.item() if isinstance(v, torch.Tensor) else v
@@ -56,16 +57,31 @@ def generate_mean_ensemble_metrics(df, threshold=0):
     precision = tp / (tp + fp)
     mcc = compute_mcc_from_cm(tp, tn, fp, fn)
 
-    return {
+    result = {
         "sensitivity": sensitivity,
         "specificity": specificity,
         "accuracy": accuracy,
         "precision": precision,
         "mcc": mcc,
     }
+    return round_dict(result, 4)
     
-def aggregate_pred_dataframe(files):
-    dfs = [pd.read_csv(f) for f in files]
+def generate_mean_ensemble_metrics_auto(df_valid, df_test):
+    thresholds = np.arange(-3, 1, 0.1)
+    valid_mccs = []
+    for threshold in thresholds:
+        valid_mccs.append(generate_mean_ensemble_metrics(df_valid, threshold=threshold)['mcc'])
+    
+    best_threshold_arg = np.argmax(valid_mccs)
+    best_threshold = thresholds[best_threshold_arg]
+    
+    best_test_metric = generate_mean_ensemble_metrics(df_test, threshold=best_threshold)
+    return best_test_metric
+    
+
+def aggregate_pred_dataframe(files=None, dfs=None):
+    if dfs is None:
+        dfs = [pd.read_csv(f) for f in files]
     final_df = dfs[0].rename(columns={'pred': 'pred_0'})
     for i in range(1, len(dfs)):
         final_df[f'pred_{i}'] = dfs[i]['pred']

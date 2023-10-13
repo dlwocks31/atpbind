@@ -242,16 +242,17 @@ class Pipeline:
                 self.train(num_epoch=1)
 
                 # record
-                cur_result = self.evaluate(split='test', threshold=0)
+                if use_dynamic_threshold:
+                    valid_mcc_and_threshold = self.calculate_best_mcc_and_threshold(threshold_set='valid')
+                    valid_mcc = valid_mcc_and_threshold['best_mcc']
+                    threshold = valid_mcc_and_threshold['best_threshold']
+                else:
+                    valid_mcc = self.evaluate(split='valid', threshold=0)['mcc']
+                    threshold = 0
+                cur_result = self.evaluate(split='test', threshold=threshold)
+                cur_result['valid_mcc'] = valid_mcc
                 cur_result['train_bce'] = self.get_last_bce()
                 cur_result['valid_bce'] = self.calculate_valid_loss()
-                if use_dynamic_threshold:
-                    cur_result['valid_mcc'] = self.calculate_best_mcc_and_threshold(
-                        threshold_set='valid'
-                    )['best_mcc']
-                else:
-                    cur_result['valid_mcc'] = self.evaluate(
-                        split='valid', threshold=0)['mcc']
                 cur_result = round_dict(cur_result, 4)
                 train_record.append(cur_result)
                 # logging

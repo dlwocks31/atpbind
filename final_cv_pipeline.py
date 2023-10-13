@@ -5,7 +5,7 @@ import os
 import torch
 import inspect
 
-from lib.utils import generate_mean_ensemble_metrics, read_initial_csv
+from lib.utils import generate_mean_ensemble_metrics_auto, read_initial_csv, aggregate_pred_dataframe
 GPU = 0
 
 NEGATIVE_USE_RATIO = 0.25
@@ -49,6 +49,8 @@ def resiboost_preprocess(pipeline, prev_results):
     
     for _, row in confident_negative_df.iterrows():
         protein_index_in_dataset = int(row['protein_index'])
+        # assume valid fold is consecutive: so that if protein index is larger than first protein index in valid fold, 
+        # we need to add the length of valid fold as an offset
         if row['protein_index'] >= pipeline.dataset.valid_fold()[0]:
             protein_index_in_dataset += len(pipeline.dataset.valid_fold())
         masks[protein_index_in_dataset][int(row['residue_index'])] = False
@@ -294,13 +296,9 @@ def main(model_key, valid_fold):
                 iter=iter,
             )
         # do mean ensemble
-        final_df = results[0]['df_test'].rename(columns={'pred': 'pred_0'})
-        for i in range(1, len(results)):
-            final_df[f'pred_{i}'] = results[i]['df_test']['pred']
-        final_df['pred'] = final_df[[f'pred_{i}' for i in range(len(results))]].mean(axis=1)
-        final_df.to_csv(f'result_cv/{model_key}/fold_{valid_fold}/test.csv', index=False)
-        # aggregate record to result_cv/result_cv.csv
-        me_metric = generate_mean_ensemble_metrics(final_df)
+        df_valid = aggregate_pred_dataframe(dfs=[r['df_valid'] for r in results])
+        df_test = aggregate_pred_dataframe(dfs=[r['df_test'] for r in results])
+        me_metric = generate_mean_ensemble_metrics_auto(df_valid=df_valid, df_test=df_test)
         write_result_ensemble(
             model_key=model_key,
             valid_fold=valid_fold,
