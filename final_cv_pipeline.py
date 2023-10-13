@@ -105,8 +105,16 @@ ALL_PARAMS = {
         },
         'pipeline_before_train_fn': lambda pipeline: pipeline.model.freeze_lm(
             freeze_all=False,
-            freeze_layer_count=30,
+            freeze_layer_count=31,
         ),
+    },
+    'esm-t33-ensemble': {
+        'ensemble': True,
+        'model': 'esm-t33',
+        'model_kwargs': {
+            'freeze_esm': False,
+            'freeze_layer_count': 30,  
+        },
     },
     'bert-gearnet-ensemble': {
         'ensemble': True,
@@ -185,7 +193,7 @@ def single_run(
     undersample_kwargs={}, 
     pipeline_before_train_fn=None,
     prev_result=None,
-    batch_size=4,
+    batch_size=8,
     patience=1 if DEBUG else 5,
 ):
     pipeline = Pipeline(

@@ -1,4 +1,5 @@
 from sklearn.metrics import confusion_matrix
+from torchdrug import metrics
 import torch
 from statistics import mean, stdev
 import pandas as pd
@@ -56,6 +57,7 @@ def generate_mean_ensemble_metrics(df, threshold=0):
     accuracy = (tp + tn) / (tp + tn + fp + fn)
     precision = tp / (tp + fp)
     mcc = compute_mcc_from_cm(tp, tn, fp, fn)
+    auroc = metrics.area_under_roc(sum_preds, df['target'])
 
     result = {
         "sensitivity": sensitivity,
@@ -63,6 +65,7 @@ def generate_mean_ensemble_metrics(df, threshold=0):
         "accuracy": accuracy,
         "precision": precision,
         "mcc": mcc,
+        "micro_auroc": auroc,
     }
     return round_dict(result, 4)
     
