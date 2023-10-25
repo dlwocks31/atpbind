@@ -57,7 +57,10 @@ def generate_mean_ensemble_metrics(df, threshold=0):
     accuracy = (tp + tn) / (tp + tn + fp + fn)
     precision = tp / (tp + fp)
     mcc = compute_mcc_from_cm(tp, tn, fp, fn)
-    auroc = metrics.area_under_roc(sum_preds, df['target'])
+    
+    sum_preds_tensor = torch.tensor(sum_preds.values).float()
+    target_tensor = torch.tensor(df['target'].values).float()
+    auroc = metrics.area_under_roc(sum_preds_tensor, target_tensor).item()
 
     result = {
         "sensitivity": sensitivity,
@@ -81,11 +84,16 @@ def generate_mean_ensemble_metrics_auto(df_valid, df_test):
     best_test_metric = generate_mean_ensemble_metrics(df_test, threshold=best_threshold)
     return best_test_metric
     
+def sigmoid(x):
+    return 1 / (1 + np.exp(-x))
 
-def aggregate_pred_dataframe(files=None, dfs=None):
+def aggregate_pred_dataframe(files=None, dfs=None, apply_sig=False):
     if dfs is None:
         dfs = [pd.read_csv(f) for f in files]
     final_df = dfs[0].rename(columns={'pred': 'pred_0'})
     for i in range(1, len(dfs)):
         final_df[f'pred_{i}'] = dfs[i]['pred']
+    if apply_sig:
+        for i in range(len(dfs)):
+            final_df[f'pred_{i}'] = final_df[f'pred_{i}'].apply(sigmoid)
     return final_df.reset_index()
