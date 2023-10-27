@@ -10,7 +10,6 @@ from lib.utils import generate_mean_ensemble_metrics_auto, read_initial_csv, agg
 GPU = 0
 
 NEGATIVE_USE_RATIO = 0.5
-ENSEMBLE_MODEL_COUNT = 100
 
 def rus_preprocess(pipeline):
     # freeze lm
@@ -31,7 +30,9 @@ def rus_preprocess(pipeline):
 def sigmoid(x):
     return 1 / (1 + np.exp(-x))
 
-def resiboost_preprocess(pipeline, prev_results):
+def resiboost_preprocess(pipeline, prev_results, negative_use_ratio):
+    if not negative_use_ratio:
+        raise ValueError('negative_use_ratio must be specified for resiboost_preprocess')
     # freeze lm
     pipeline.model.freeze_lm(
         freeze_all=False,
@@ -57,8 +58,9 @@ def resiboost_preprocess(pipeline, prev_results):
     final_df.reset_index(inplace=True)
     negative_df = final_df[final_df['target'] == 0]
     
+    # larger negative_use_ratio means more negative samples are used in training
     confident_negative_df = negative_df.sort_values(
-        by=['pred'])[:int(len(negative_df) * (1-NEGATIVE_USE_RATIO))]
+        by=['pred'])[:int(len(negative_df) * (1-negative_use_ratio))]
     
     print(f'Using {len(confident_negative_df)} negative samples out of {len(negative_df)}. Most confident negative samples:')
     print(confident_negative_df.head(10))
@@ -74,7 +76,6 @@ def resiboost_preprocess(pipeline, prev_results):
     
 ALL_PARAMS = {
     'esm-t33': {
-        'ensemble': False,
         'model': 'esm-t33',
         'model_kwargs': {
             'freeze_esm': False,
@@ -82,7 +83,6 @@ ALL_PARAMS = {
         },
     },
     'bert': {
-        'ensemble': False,
         'model': 'bert',
         'model_kwargs': {
             'freeze_bert': False,
@@ -90,7 +90,6 @@ ALL_PARAMS = {
         },
     },
     'gearnet': {
-        'ensemble': False,
         'model': 'gearnet',
         'model_kwargs': {
             'input_dim': 21,
@@ -98,7 +97,6 @@ ALL_PARAMS = {
         },
     },
     'bert-gearnet': {
-        'ensemble': False,
         'model': 'lm-gearnet',
         'model_kwargs': {
             'lm_type': 'bert',
@@ -111,7 +109,6 @@ ALL_PARAMS = {
         ),
     },
     'esm-33-gearnet': {
-        'ensemble': False,
         'model': 'lm-gearnet',
         'model_kwargs': {
             'lm_type': 'esm-t33',
@@ -124,7 +121,7 @@ ALL_PARAMS = {
         ),
     },
     'esm-t33-ensemble': {
-        'ensemble': True,
+        'ensemble_count': 10,
         'model': 'esm-t33',
         'model_kwargs': {
             'freeze_esm': False,
@@ -132,7 +129,7 @@ ALL_PARAMS = {
         },
     },
     'bert-gearnet-ensemble': {
-        'ensemble': True,
+        'ensemble_count': 10,
         'model': 'lm-gearnet',
         'model_kwargs': {
             'lm_type': 'bert',
@@ -145,7 +142,7 @@ ALL_PARAMS = {
         ),
     },
     'esm-33-gearnet-ensemble': {
-        'ensemble': True,
+        'ensemble_count': 10,
         'model': 'lm-gearnet',
         'model_kwargs': {
             'lm_type': 'esm-t33',
@@ -158,7 +155,7 @@ ALL_PARAMS = {
         ),
     },
     'esm-33-gearnet-ensemble-rus': {
-        'ensemble': True,
+        'ensemble_count': 10,
         'model': 'lm-gearnet',
         'model_kwargs': {
             'lm_type': 'esm-t33',
@@ -168,7 +165,7 @@ ALL_PARAMS = {
         'pipeline_before_train_fn': rus_preprocess,
     },
     'esm-33-gearnet-resiboost': {
-        'ensemble': True,
+        'ensemble_count': 100,
         'model': 'lm-gearnet',
         'model_kwargs': {
             'lm_type': 'esm-t33',
@@ -176,6 +173,20 @@ ALL_PARAMS = {
             'gearnet_hidden_dim_count': 4,
         },
         'batch_size': 6,
+        'negative_use_ratio': 0.5,
+        'pipeline_before_train_fn': resiboost_preprocess,
+        # probably pipeline_before train should receive previous result, so that we can build mask and apply undersample
+    },
+    'esm-33-gearnet-resiboost-n25': {
+        'ensemble_count': 100,
+        'model': 'lm-gearnet',
+        'model_kwargs': {
+            'lm_type': 'esm-t33',
+            'gearnet_hidden_dim_size': 512,
+            'gearnet_hidden_dim_count': 4,
+        },
+        'batch_size': 6,
+        'negative_use_ratio': 0.25,
         'pipeline_before_train_fn': resiboost_preprocess,
         # probably pipeline_before train should receive previous result, so that we can build mask and apply undersample
     },
@@ -211,6 +222,7 @@ def single_run(
     prev_result=None,
     batch_size=8,
     patience=1 if DEBUG else 5,
+    negative_use_ratio=None,
 ):
     print(f'batch_size: {batch_size}')
     pipeline = Pipeline(
@@ -233,7 +245,7 @@ def single_run(
             pipeline_before_train_fn(pipeline)
         else: # used by resiboost, which need previous state
             print('Using previous result')
-            pipeline_before_train_fn(pipeline, prev_result)
+            pipeline_before_train_fn(pipeline, prev_result, negative_use_ratio)
     
     train_record, state_dict = pipeline.train_until_fit(patience=patience, return_state_dict=True)
     
@@ -283,7 +295,7 @@ def write_result_intermediate(model_key, valid_fold, result, iter):
             'valid_fold': valid_fold,
             'iter': iter,
             **result['record'],
-            'finished_at': pd.Timestamp.now(),
+            'finished_at': pd.Timestamp.now().strftime('%Y-%m-%d %X'),
         }
     ])])
     record_df.to_csv(f'{folder}/agg_record.csv', index=False)
@@ -295,27 +307,29 @@ def write_result_ensemble(model_key, valid_fold, metric):
             'model_key': model_key,
             'valid_fold': valid_fold,
             **metric,
-            'finished_at': pd.Timestamp.now(),
+            'finished_at': pd.Timestamp.now().strftime('%Y-%m-%d %X'),
         }
     ])])
     record_df.to_csv('result_cv/result_cv.csv', index=False)
 
 def main(model_key, valid_fold):
-    model = ALL_PARAMS[model_key]
-    if model['ensemble'] == False:
+    model = ALL_PARAMS[model_key].copy()
+    if 'ensemble_count' not in model: # single run model
         result = single_run(
             valid_fold_num=valid_fold,
-            **{k: model[k] for k in model if k != 'ensemble'},
+            **model,
         )
         write_result(model_key=model_key,
                      valid_fold=valid_fold,
                      result=result)
     else:
         results = []
-        for iter in range(ENSEMBLE_MODEL_COUNT):
+        ensemble_count = model.pop('ensemble_count')
+        
+        for iter in range(ensemble_count):
             result = single_run(
                 valid_fold_num=valid_fold,
-                **{k: model[k] for k in model if k != 'ensemble'},
+                **model,
                 prev_result=results,
             )
             results.append(result)
