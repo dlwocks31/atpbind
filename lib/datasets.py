@@ -144,6 +144,7 @@ class ATPBind3D(data.ProteinDataset):
             print('Initialize Undersampling: fixed mask')
             self.masks = masks
         else:
+            print('Initialize Undersampling: all ones')
             self.masks = [
                 torch.ones(len(target)).bool()
                 for target in self.targets["binding"]

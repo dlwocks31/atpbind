@@ -9,9 +9,8 @@ import numpy as np
 from lib.utils import generate_mean_ensemble_metrics_auto, read_initial_csv, aggregate_pred_dataframe
 GPU = 0
 
-NEGATIVE_USE_RATIO = 0.5
 
-def rus_preprocess(pipeline):
+def rus_preprocess(pipeline, prev_results, negative_use_ratio):
     # freeze lm
     pipeline.model.freeze_lm(
         freeze_all=False,
@@ -21,7 +20,7 @@ def rus_preprocess(pipeline):
     masks = pipeline.dataset.masks
     for i in range(len(masks)):
         positive_mask = torch.tensor(pipeline.dataset.targets['binding'][i]) == 1
-        negative_mask = torch.rand(len(masks[i])) < NEGATIVE_USE_RATIO
+        negative_mask = torch.rand(len(masks[i])) < negative_use_ratio
         assert(len(positive_mask) == len(negative_mask))
         mask = positive_mask | negative_mask
         masks[i] = mask
@@ -40,6 +39,7 @@ def resiboost_preprocess(pipeline, prev_results, negative_use_ratio):
     )
     # build mask
     if not prev_results:
+        print('No previous result, mask nothing')
         return
     masks = pipeline.dataset.masks
     # assert all of mask is True
@@ -62,7 +62,7 @@ def resiboost_preprocess(pipeline, prev_results, negative_use_ratio):
     confident_negative_df = negative_df.sort_values(
         by=['pred'])[:int(len(negative_df) * (1-negative_use_ratio))]
     
-    print(f'Using {len(confident_negative_df)} negative samples out of {len(negative_df)}. Most confident negative samples:')
+    print(f'Masking out {len(confident_negative_df)} negative samples out of {len(negative_df)}. Most confident negative samples:')
     print(confident_negative_df.head(10))
     for _, row in confident_negative_df.iterrows():
         protein_index_in_dataset = int(row['protein_index'])
@@ -162,10 +162,11 @@ ALL_PARAMS = {
             'gearnet_hidden_dim_size': 512,
             'gearnet_hidden_dim_count': 4,
         },
+        'negative_use_ratio': 0.5,
         'pipeline_before_train_fn': rus_preprocess,
     },
     'esm-33-gearnet-resiboost': {
-        'ensemble_count': 100,
+        'ensemble_count': 50,
         'model': 'lm-gearnet',
         'model_kwargs': {
             'lm_type': 'esm-t33',
@@ -178,7 +179,7 @@ ALL_PARAMS = {
         # probably pipeline_before train should receive previous result, so that we can build mask and apply undersample
     },
     'esm-33-gearnet-resiboost-n25': {
-        'ensemble_count': 100,
+        'ensemble_count': 50,
         'model': 'lm-gearnet',
         'model_kwargs': {
             'lm_type': 'esm-t33',
@@ -347,7 +348,7 @@ def main(model_key, valid_fold):
         print(df_valid.head(10))
         print('df_test:')
         print(df_test.head(10))
-        me_metric = generate_mean_ensemble_metrics_auto(df_valid=df_valid, df_test=df_test)
+        me_metric = generate_mean_ensemble_metrics_auto(df_valid=df_valid, df_test=df_test, start=0.1, end=0.6, step=0.01)
         write_result_ensemble(
             model_key=model_key,
             valid_fold=valid_fold,

@@ -115,18 +115,11 @@ def adaboost_iter(iter_num, masks=None, prefix='adaboost', mask_negative_ratio=0
     pipeline.apply_undersample(masks=masks)
 
     print('Training..')
-    CSV_PATH = f'logs/{prefix}.csv'
     train_record, train_preds, valid_preds, test_preds = pipeline.train_until_fit(
         patience=5,  # TODO 5
         return_preds=True,
         use_dynamic_threshold=False
     )
-    df = read_initial_csv(CSV_PATH)
-    df = pd.concat([df,
-                    pd.DataFrame([{'iter_num': iter_num, **train_record_row}
-                                  for train_record_row in train_record])])
-    df.to_csv(CSV_PATH, index=False)
-
     print('Train Done')
 
     # save prediction of current round

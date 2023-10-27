@@ -72,8 +72,8 @@ def generate_mean_ensemble_metrics(df, threshold=0):
     }
     return round_dict(result, 4)
     
-def generate_mean_ensemble_metrics_auto(df_valid, df_test):
-    thresholds = np.arange(-3, 1, 0.1)
+def generate_mean_ensemble_metrics_auto(df_valid, df_test, start=-3, end=1, step=0.1):
+    thresholds = np.arange(start, end, step)
     valid_mccs = []
     for threshold in thresholds:
         valid_mccs.append(generate_mean_ensemble_metrics(df_valid, threshold=threshold)['mcc'])
