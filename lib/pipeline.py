@@ -275,16 +275,17 @@ class Pipeline:
 
                 # record
                 if use_dynamic_threshold:
-                    valid_mcc_and_threshold = self.calculate_best_mcc_and_threshold(threshold_set='valid')
-                    valid_mcc = valid_mcc_and_threshold['best_mcc']
-                    threshold = valid_mcc_and_threshold['best_threshold']
+                    results = self.valid_dataset_stats(threshold_set='valid')
+                    valid_mcc = results['best_mcc']
+                    threshold = results['best_threshold']
+                    valid_bce = results['loss']
                 else:
                     valid_mcc = self.evaluate(split='valid', threshold=0)['mcc']
                     threshold = 0
                 cur_result = self.evaluate(split='test', threshold=threshold)
                 cur_result['valid_mcc'] = valid_mcc
                 cur_result['train_bce'] = self.get_last_bce()
-                cur_result['valid_bce'] = self.calculate_valid_loss()
+                cur_result['valid_bce'] = valid_bce
                 cur_result = round_dict(cur_result, 4)
                 cur_result['lr'] = round(self.optimizer.param_groups[0]['lr'], 9)
                 train_record.append(cur_result)
