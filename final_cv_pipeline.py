@@ -281,7 +281,7 @@ def create_single_pred_dataframe(pipeline, dataset, gpu=None):
 
     return df
 
-DEBUG = True
+DEBUG = False
 def single_run(
     valid_fold_num,
     model,

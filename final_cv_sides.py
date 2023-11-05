@@ -81,15 +81,18 @@ def scheduler_test(base_lr, max_lr, step_size_up, step_size_down, fold=0):
         )
 
 if __name__ == '__main__':
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--base_lrs', type=float, nargs='+', default=[1e-3])
-    parser.add_argument('--max_lrs', type=float, nargs='+', default=[1e-2])
-    parser.add_argument('--step_size_up', type=int, default=25)
-    parser.add_argument('--step_size_down', type=int, default=25)
-    args = parser.parse_args()
-    base_lrs = args.base_lrs
-    max_lrs = args.max_lrs
-    for base_lr in base_lrs:
-        for max_lr in max_lrs:
-            scheduler_test(base_lr=base_lr, max_lr=max_lr)
+    lr_range_test(tenfold_iter=5, valid_fold_num=0)
+    lr_range_test(tenfold_iter=10, valid_fold_num=1)
+    lr_range_test(tenfold_iter=20, valid_fold_num=2)
+    # import argparse
+    # parser = argparse.ArgumentParser()
+    # parser.add_argument('--base_lrs', type=float, nargs='+', default=[1e-3])
+    # parser.add_argument('--max_lrs', type=float, nargs='+', default=[1e-2])
+    # parser.add_argument('--step_size_up', type=int, default=25)
+    # parser.add_argument('--step_size_down', type=int, default=25)
+    # args = parser.parse_args()
+    # base_lrs = args.base_lrs
+    # max_lrs = args.max_lrs
+    # for base_lr in base_lrs:
+    #     for max_lr in max_lrs:
+    #         scheduler_test(base_lr=base_lr, max_lr=max_lr)

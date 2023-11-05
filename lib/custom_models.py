@@ -99,20 +99,16 @@ class LMGearNetModel(torch.nn.Module, core.Configurable):
         print('get_parameters_with_discriminative_lr:', parameters)
         return parameters
     
-    def freeze_lm(self, freeze_all=True, freeze_layer_count=None):
-        if freeze_all:
-            # freeze the entire bert model
-            for param in self.lm.parameters():
-                param.requires_grad = False
-        else:
-            # freeze the embeddings
-            for param in self.lm.embeddings.parameters():
-                param.requires_grad = False
-            if freeze_layer_count != -1:
-                # freeze layers in bert_model.encoder
-                for layer in self.lm.encoder.layer[:freeze_layer_count]:
-                    for param in layer.parameters():
-                        param.requires_grad = False
+    def freeze_lm(self, freeze_layer_count=None):
+        print('freeze_lm:', freeze_layer_count)
+        # freeze the embeddings
+        for param in self.lm.embeddings.parameters():
+            param.requires_grad = False
+        if freeze_layer_count != -1:
+            # freeze layers in encoder
+            for layer in self.lm.encoder.layer[:freeze_layer_count]:
+                for param in layer.parameters():
+                    param.requires_grad = False
         
     
     def freeze_gearnet(self, freeze_all=False, freeze_layer_count=0):
