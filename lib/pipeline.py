@@ -11,6 +11,7 @@ import numpy as np
 from functools import cache
 import pandas as pd
 from datetime import datetime, timedelta
+from statistics import mean
 
 from .tasks import NodePropertyPrediction, MeanEnsembleNodePropertyPrediction
 from .datasets import ATPBind, ATPBind3D
@@ -19,6 +20,7 @@ from .custom_models import GearNetWrapModel, LMGearNetModel
 from .utils import dict_tensor_to_num, round_dict
 from .lr_scheduler import CyclicLR, ExponentialLR
 
+from timer_cm import Timer
 
 class DisableLogger():
     def __enter__(self):
@@ -323,26 +325,10 @@ class Pipeline:
         bce_records = meter.records['binary cross entropy'][index]
         return mean(bce_records)
 
-    def calculate_valid_loss(self):
-        from statistics import mean
+
+    def valid_dataset_stats(self):
         dataloader = data.DataLoader(
-            self.valid_set, batch_size=self.batch_size, shuffle=False)
-        model = self.task
-
-        model.eval()
-
-        metrics = []
-        with torch.no_grad():
-            for batch in dataloader:
-                batch = utils.cuda(batch, device=f'cuda:{self.gpus[0]}')
-                loss, metric = model(batch)
-                metrics.append(metric['binary cross entropy'].item())
-
-        return mean(metrics)
-
-    def calculate_best_mcc_and_threshold(self, threshold_set='valid'):
-        dataloader = data.DataLoader(
-            self.valid_set if threshold_set == 'valid' else self.test_set,
+            self.valid_set,
             batch_size=self.batch_size,
             shuffle=False
         )
@@ -351,14 +337,16 @@ class Pipeline:
         targets = []
         thresholds = np.linspace(-3, 1, num=41)
         mcc_values = [0 for i in range(len(thresholds))]
-        self.model.eval()
+        self.task.eval()
+        metrics = []
         with torch.no_grad():
             for batch in dataloader:
                 batch = utils.cuda(
                     batch, device=torch.device(f'cuda:{self.gpus[0]}'))
-                pred, target = self.task.predict_and_target(batch)
+                pred, target, loss, metric = self.task.predict_and_target_with_metric(batch)
                 preds.append(pred)
                 targets.append(target)
+                metrics.append(metric['binary cross entropy'].item())
 
         pred = utils.cat(preds)
         target = utils.cat(targets)
@@ -373,16 +361,10 @@ class Pipeline:
 
         return {
             'best_mcc': mcc_values[max_mcc_idx],
-            'best_threshold': thresholds[max_mcc_idx]
+            'best_threshold': thresholds[max_mcc_idx],
+            'loss': mean(metrics),
         }
 
     def evaluate(self, split="test", verbose=False, threshold=0):
-        if threshold == 'auto':
-            mcc_and_threshold = self.calculate_best_mcc_and_threshold(
-                threshold_set='valid')
-            if verbose:
-                print(f'threshold: {mcc_and_threshold}\n')
-            self.task.threshold = mcc_and_threshold['best_threshold']
-        else:
-            self.task.threshold = threshold
+        self.task.threshold = threshold
         return dict_tensor_to_num(self.solver.evaluate(split=split))

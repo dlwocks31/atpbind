@@ -103,7 +103,10 @@ class NodePropertyPrediction(tasks.Task, core.Configurable):
         }
 
     def forward(self, batch):
-        """"""
+        _, _, all_loss, metric = self.predict_and_target_with_metric(batch)
+        return all_loss, metric
+
+    def predict_and_target_with_metric(self, batch):
         all_loss = torch.tensor(0, dtype=torch.float32, device=self.device).view(1)
         metric = {}
 
@@ -132,7 +135,7 @@ class NodePropertyPrediction(tasks.Task, core.Configurable):
 
         all_loss += loss
 
-        return all_loss, metric
+        return pred, target, all_loss, metric
 
     def evaluate(self, pred, target, threshold=None):
         if threshold is None:
