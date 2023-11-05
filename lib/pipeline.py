@@ -17,6 +17,7 @@ from .datasets import ATPBind, ATPBind3D
 from .bert import BertWrapModel, EsmWrapModel
 from .custom_models import GearNetWrapModel, LMGearNetModel
 from .utils import dict_tensor_to_num, round_dict
+from .lr_scheduler import CyclicLR, ExponentialLR
 
 
 class DisableLogger():
@@ -95,8 +96,12 @@ class Pipeline:
                  bce_weight=1,
                  verbose=False,
                  optimizer='adam',
+                 scheduler=None,
+                 scheduler_kwargs={},
                  valid_fold_num=0,
                  max_length=350,
+                 num_mlp_layer=2,
+                 discriminative_decay_factor=None,
                  ):
         self.gpus = gpus
 
@@ -121,7 +126,7 @@ class Pipeline:
             self.task = NodePropertyPrediction(
                 self.model,
                 normalization=False,
-                num_mlp_layer=2,
+                num_mlp_layer=num_mlp_layer,
                 metric=METRICS_USING,
                 bce_weight=torch.tensor(
                     [bce_weight], device=torch.device(f'cuda:{self.gpus[0]}')),
@@ -142,7 +147,7 @@ class Pipeline:
             task_kwargs = {
                 'graph_construction_model': graph_construction_model,
                 'normalization': False,
-                'num_mlp_layer': 2,
+                'num_mlp_layer': num_mlp_layer,
                 'metric': METRICS_USING,
                 'bce_weight': torch.tensor([bce_weight], device=torch.device(f'cuda:{self.gpus[0]}')),
                 **task_kwargs,
@@ -167,12 +172,37 @@ class Pipeline:
                 'Optimizer must be one of {}'.format(['adam', 'adamw']))
         # it does't matter whether we use self.task or self.model.parameters(), since mlp is added at preprocess time
         # and mlp parameters is then added to optimizer
+        
+        if model == 'lm-gearnet' and discriminative_decay_factor is not None:
+            print('Adam parameter: discriminative')
+            base_lr = optimizer_kwargs.get('lr', 1e-3)
+            parameters = self.model.get_parameters_with_discriminative_lr(
+                lr=base_lr, lr_decay_factor=discriminative_decay_factor
+            )
+        else:
+            print('Adam parameter: all')
+            parameters = self.model.parameters()
+
         if optimizer == 'adam':
-            self.optimizer = torch.optim.Adam(
-                self.model.parameters(), **optimizer_kwargs)
+            self.optimizer = torch.optim.Adam(parameters, **optimizer_kwargs)
         elif optimizer == 'adamw':
-            self.optimizer = torch.optim.AdamW(
-                self.model.parameters(), **optimizer_kwargs)
+            self.optimizer = torch.optim.AdamW(parameters, **optimizer_kwargs)
+
+        if scheduler == 'cyclic':
+            print('use cyclic lr scheduler')
+            self.scheduler = CyclicLR(
+                self.optimizer, 
+                **scheduler_kwargs,
+            )
+        elif scheduler == 'exponential':
+            print('use exponential lr scheduler')
+            self.scheduler = ExponentialLR(
+                self.optimizer, 
+                **scheduler_kwargs,
+            )
+        else:
+            print('no scheduler')
+            self.scheduler = None
 
         self.verbose = verbose
         self.batch_size = batch_size
@@ -182,6 +212,7 @@ class Pipeline:
                                       self.valid_set,
                                       self.test_set,
                                       self.optimizer,
+                                      scheduler=self.scheduler,
                                       batch_size=self.batch_size,
                                       log_interval=1000000000,
                                       gpus=self.gpus,
@@ -223,20 +254,19 @@ class Pipeline:
     def train(self, num_epoch):
         return self.solver.train(num_epoch=num_epoch)
 
-    def train_until_fit(self, patience=1, early_stop_metric='valid_mcc', return_preds=False, return_state_dict=False, use_dynamic_threshold=True):
-        if early_stop_metric not in ['valid_mcc', 'valid_bce']:
-            raise ValueError('early_stop_metric must be one of {}'.format(
-                ['valid_mcc', 'valid_bce']))
+    def train_until_fit(self, max_epoch=None, patience=1, early_stop_metric='valid_mcc', return_preds=False, return_state_dict=False, use_dynamic_threshold=True):
         from itertools import count
         train_record = []
         train_preds = None
         valid_preds = None
         test_preds = None
         state_dict = None
-        best_metric = -1 if early_stop_metric == 'valid_mcc' else 1e10
+        best_metric = -1
 
         last_time = datetime.now()
         for epoch in count(start=1):
+            if (max_epoch is not None) and (epoch > max_epoch):
+                break
             cm = contextlib.nullcontext() if self.verbose else DisableLogger()
             with cm:
                 self.train(num_epoch=1)
@@ -254,17 +284,17 @@ class Pipeline:
                 cur_result['train_bce'] = self.get_last_bce()
                 cur_result['valid_bce'] = self.calculate_valid_loss()
                 cur_result = round_dict(cur_result, 4)
+                cur_result['lr'] = round(self.optimizer.param_groups[0]['lr'], 9)
                 train_record.append(cur_result)
                 # logging
                 cur_time = datetime.now()
                 print(f'{format_timedelta(cur_time - last_time)} {cur_result}')
                 last_time = cur_time
                 # early stop
-                should_replace_best_metric = cur_result[
-                    'valid_mcc'] > best_metric if early_stop_metric == 'valid_mcc' else cur_result['valid_bce'] < best_metric
+                should_replace_best_metric = cur_result['valid_mcc'] > best_metric
                 if should_replace_best_metric:
                     if return_preds:
-                        best_metric = cur_result[early_stop_metric]
+                        best_metric = cur_result['valid_mcc']
                         train_preds = create_single_pred_dataframe(
                             self, self.train_set)
                         valid_preds = create_single_pred_dataframe(
@@ -274,8 +304,7 @@ class Pipeline:
                     elif return_state_dict:
                         state_dict = deepcopy(self.task.state_dict())
                         
-                best_index = np.argmax([record[early_stop_metric] for record in train_record]) if early_stop_metric == 'valid_mcc' else np.argmin(
-                    [record[early_stop_metric] for record in train_record])
+                best_index = np.argmax([record['valid_mcc'] for record in train_record])
                 if best_index < len(train_record) - patience:
                     break
 

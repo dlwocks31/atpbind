@@ -13,12 +13,12 @@ def separate_alphabets(text):
 
 
 lm_type_map = {
-    'bert': (BertModel, BertTokenizer, "Rostlab/prot_bert"),
-    'esm-t6': (EsmModel, AutoTokenizer, "facebook/esm2_t6_8M_UR50D"),
-    'esm-t12': (EsmModel, AutoTokenizer, "facebook/esm2_t12_35M_UR50D"),
-    'esm-t30': (EsmModel, AutoTokenizer, "facebook/esm2_t30_150M_UR50D"),
-    'esm-t33': (EsmModel, AutoTokenizer, "facebook/esm2_t33_650M_UR50D"),
-    'esm-t36': (EsmModel, AutoTokenizer, "facebook/esm2_t36_3B_UR50D"),
+    'bert': (BertModel, BertTokenizer, "Rostlab/prot_bert", 30),
+    'esm-t6': (EsmModel, AutoTokenizer, "facebook/esm2_t6_8M_UR50D", 6),
+    'esm-t12': (EsmModel, AutoTokenizer, "facebook/esm2_t12_35M_UR50D", 12),
+    'esm-t30': (EsmModel, AutoTokenizer, "facebook/esm2_t30_150M_UR50D", 30),
+    'esm-t33': (EsmModel, AutoTokenizer, "facebook/esm2_t33_650M_UR50D", 33),
+    'esm-t36': (EsmModel, AutoTokenizer, "facebook/esm2_t36_3B_UR50D", 36),
 }
 
 class LMGearNetModel(torch.nn.Module, core.Configurable):
@@ -31,9 +31,12 @@ class LMGearNetModel(torch.nn.Module, core.Configurable):
                  gearnet_concat_hidden=True,
                  lm_concat_to_output=False,
                  lm_short_cut=False,
+                 lm_freeze_layer_count=None,
     ):
         super().__init__()
-        Model, Tokenizer, pretrained_model_name = lm_type_map[lm_type]
+        Model, Tokenizer, pretrained_model_name, lm_layer_count = lm_type_map[lm_type]
+        self.lm_layer_count = lm_layer_count
+        self.pretrained_model_name = pretrained_model_name
         self.tokenizer = Tokenizer.from_pretrained(pretrained_model_name, do_lower_case=False)
         self.lm = Model.from_pretrained(pretrained_model_name).to(f'cuda:{gpu}')
         self.gearnet = models.GearNet(
@@ -54,6 +57,9 @@ class LMGearNetModel(torch.nn.Module, core.Configurable):
             assert self.gearnet.output_dim == self.lm.config.hidden_size, "lm_short_cut is only available when gearnet output dim is equal to lm hidden size"
         self.lm_short_cut = lm_short_cut
         self.gpu = gpu
+        
+        if lm_freeze_layer_count is not None:
+            self.freeze_lm(freeze_layer_count=lm_freeze_layer_count)
 
     def forward(self, graph, _, all_loss=None, metric=None):
         # print("sequence: ", graph.to_sequence())
@@ -80,6 +86,18 @@ class LMGearNetModel(torch.nn.Module, core.Configurable):
         return {
             "node_feature": final_output,
         }
+        
+    def get_parameters_with_discriminative_lr(self, lr=1e-5, lr_decay_factor=2):
+        total_layers = self.lm_layer_count
+        parameters = [
+            {
+                "params": item.parameters(), 
+                "lr": lr / (lr_decay_factor ** (total_layers - i - 1))
+            } 
+            for i, item in enumerate(self.lm.encoder.layer)
+        ] + [{"params": self.gearnet.parameters(), "lr": lr}]
+        print('get_parameters_with_discriminative_lr:', parameters)
+        return parameters
     
     def freeze_lm(self, freeze_all=True, freeze_layer_count=None):
         if freeze_all:

@@ -11,11 +11,6 @@ GPU = 0
 
 
 def rus_preprocess(pipeline, prev_results, negative_use_ratio):
-    # freeze lm
-    pipeline.model.freeze_lm(
-        freeze_all=False,
-        freeze_layer_count=31,
-    )
     # build random mask
     masks = pipeline.dataset.masks
     for i in range(len(masks)):
@@ -32,11 +27,6 @@ def sigmoid(x):
 def resiboost_preprocess(pipeline, prev_results, negative_use_ratio):
     if not negative_use_ratio:
         raise ValueError('negative_use_ratio must be specified for resiboost_preprocess')
-    # freeze lm
-    pipeline.model.freeze_lm(
-        freeze_all=False,
-        freeze_layer_count=30,
-    )
     # build mask
     if not prev_results:
         print('No previous result, mask nothing')
@@ -74,12 +64,52 @@ def resiboost_preprocess(pipeline, prev_results, negative_use_ratio):
     
     pipeline.apply_undersample(masks=masks)
     
+def esm_33_gearnet_pretrained_pipeline_fn(layer_count=30):
+    def fn(pipeline):
+        weight_file = f'esm_pretrained_fold_{pipeline.valid_fold_num}.pt'
+        pipeline.model.lm.load_state_dict(torch.load(weight_file))
+        print(f'loaded weight from {weight_file}')
+        pipeline.model.freeze_lm(
+            freeze_all=False,
+            freeze_layer_count=32,
+        )
+    return fn
+
+
 ALL_PARAMS = {
     'esm-t33': {
         'model': 'esm-t33',
         'model_kwargs': {
             'freeze_esm': False,
             'freeze_layer_count': 30,  
+        },
+    },
+    'esm-t33-29': {
+        'model': 'esm-t33',
+        'model_kwargs': {
+            'freeze_esm': False,
+            'freeze_layer_count': 29,  
+        },
+    },
+    'esm-t33-30': {
+        'model': 'esm-t33',
+        'model_kwargs': {
+            'freeze_esm': False,
+            'freeze_layer_count': 30,  
+        },
+    },
+    'esm-t33-31': {
+        'model': 'esm-t33',
+        'model_kwargs': {
+            'freeze_esm': False,
+            'freeze_layer_count': 31,  
+        },
+    },
+    'esm-t33-32': {
+        'model': 'esm-t33',
+        'model_kwargs': {
+            'freeze_esm': False,
+            'freeze_layer_count': 32,  
         },
     },
     'bert': {
@@ -102,11 +132,8 @@ ALL_PARAMS = {
             'lm_type': 'bert',
             'gearnet_hidden_dim_size': 512,
             'gearnet_hidden_dim_count': 4,
+            'lm_freeze_layer_count': 29,
         },
-        'pipeline_before_train_fn': lambda pipeline: pipeline.model.freeze_lm(
-            freeze_all=False,
-            freeze_layer_count=29,
-        ),
     },
     'esm-33-gearnet': {
         'model': 'lm-gearnet',
@@ -114,11 +141,56 @@ ALL_PARAMS = {
             'lm_type': 'esm-t33',
             'gearnet_hidden_dim_size': 512,
             'gearnet_hidden_dim_count': 4,
+            'lm_freeze_layer_count': 30,
         },
-        'pipeline_before_train_fn': lambda pipeline: pipeline.model.freeze_lm(
-            freeze_all=False,
-            freeze_layer_count=31,
-        ),
+    },
+    'esm-33-gearnet-discr': {
+        'model': 'lm-gearnet',
+        'model_kwargs': {
+            'lm_type': 'esm-t33',
+            'gearnet_hidden_dim_size': 512,
+            'gearnet_hidden_dim_count': 4,
+            'lm_freeze_layer_count': 30,
+        },
+        'pipeline_kwargs': {
+            'discriminative_decay_factor': 2,
+        },
+    },
+    'esm-33-gearnet-31': {
+        'model': 'lm-gearnet',
+        'model_kwargs': {
+            'lm_type': 'esm-t33',
+            'gearnet_hidden_dim_size': 512,
+            'gearnet_hidden_dim_count': 4,
+            'lm_freeze_layer_count': 31,
+        },
+    },
+    'esm-33-gearnet-30': {
+        'model': 'lm-gearnet',
+        'model_kwargs': {
+            'lm_type': 'esm-t33',
+            'gearnet_hidden_dim_size': 512,
+            'gearnet_hidden_dim_count': 4,
+            'lm_freeze_layer_count': 30,
+        },
+    },
+    'esm-33-gearnet-29': {
+        'model': 'lm-gearnet',
+        'model_kwargs': {
+            'lm_type': 'esm-t33',
+            'gearnet_hidden_dim_size': 512,
+            'gearnet_hidden_dim_count': 4,
+            'lm_freeze_layer_count': 29,
+        },
+    },
+    'esm-33-gearnet-28': {
+        'model': 'lm-gearnet',
+        'model_kwargs': {
+            'lm_type': 'esm-t33',
+            'gearnet_hidden_dim_size': 512,
+            'gearnet_hidden_dim_count': 4,
+            'lm_freeze_layer_count': 28,
+        },
     },
     'esm-t33-ensemble': {
         'ensemble_count': 10,
@@ -135,24 +207,18 @@ ALL_PARAMS = {
             'lm_type': 'bert',
             'gearnet_hidden_dim_size': 512,
             'gearnet_hidden_dim_count': 4,
+            'lm_freeze_layer_count': 29,
         },
-        'pipeline_before_train_fn': lambda pipeline: pipeline.model.freeze_lm(
-            freeze_all=False,
-            freeze_layer_count=29,
-        ),
     },
     'esm-33-gearnet-ensemble': {
-        'ensemble_count': 10,
+        'ensemble_count': 50,
         'model': 'lm-gearnet',
         'model_kwargs': {
             'lm_type': 'esm-t33',
             'gearnet_hidden_dim_size': 512,
             'gearnet_hidden_dim_count': 4,
+            'lm_freeze_layer_count': 30,
         },
-        'pipeline_before_train_fn': lambda pipeline: pipeline.model.freeze_lm(
-            freeze_all=False,
-            freeze_layer_count=30,
-        ),
     },
     'esm-33-gearnet-ensemble-rus': {
         'ensemble_count': 10,
@@ -161,6 +227,7 @@ ALL_PARAMS = {
             'lm_type': 'esm-t33',
             'gearnet_hidden_dim_size': 512,
             'gearnet_hidden_dim_count': 4,
+            'lm_freeze_layer_count': 30,
         },
         'negative_use_ratio': 0.5,
         'pipeline_before_train_fn': rus_preprocess,
@@ -172,11 +239,11 @@ ALL_PARAMS = {
             'lm_type': 'esm-t33',
             'gearnet_hidden_dim_size': 512,
             'gearnet_hidden_dim_count': 4,
+            'lm_freeze_layer_count': 30,
         },
         'batch_size': 6,
         'negative_use_ratio': 0.5,
         'pipeline_before_train_fn': resiboost_preprocess,
-        # probably pipeline_before train should receive previous result, so that we can build mask and apply undersample
     },
     'esm-33-gearnet-resiboost-n25': {
         'ensemble_count': 50,
@@ -185,19 +252,20 @@ ALL_PARAMS = {
             'lm_type': 'esm-t33',
             'gearnet_hidden_dim_size': 512,
             'gearnet_hidden_dim_count': 4,
+            'lm_freeze_layer_count': 30,
         },
         'batch_size': 6,
         'negative_use_ratio': 0.25,
         'pipeline_before_train_fn': resiboost_preprocess,
-        # probably pipeline_before train should receive previous result, so that we can build mask and apply undersample
     },
 }
 
-def create_single_pred_dataframe(pipeline, dataset):
+def create_single_pred_dataframe(pipeline, dataset, gpu=None):
+    gpu = gpu or GPU
     df = pd.DataFrame()
     pipeline.task.eval()
     for protein_index, batch in enumerate(data.DataLoader(dataset, batch_size=1, shuffle=False)):
-        batch = utils.cuda(batch, device=f'cuda:{GPU}')
+        batch = utils.cuda(batch, device=f'cuda:{gpu}')
         label = pipeline.task.target(batch)['label'].flatten()
 
         new_data = {
@@ -213,30 +281,33 @@ def create_single_pred_dataframe(pipeline, dataset):
 
     return df
 
-DEBUG = False
+DEBUG = True
 def single_run(
     valid_fold_num,
     model,
     model_kwargs={},
-    undersample_kwargs={}, 
     pipeline_before_train_fn=None,
     prev_result=None,
     batch_size=8,
+    max_epoch=None,
     patience=1 if DEBUG else 5,
     negative_use_ratio=None,
+    pipeline_kwargs={},
+    gpu=None,
 ):
     print(f'batch_size: {batch_size}')
+    gpu = gpu or GPU
     pipeline = Pipeline(
         dataset='atpbind3d-minimal' if DEBUG else 'atpbind3d',
         model=model,
-        gpus=[GPU],
+        gpus=[gpu],
         model_kwargs={
-            'gpu': GPU,
+            'gpu': gpu,
             **model_kwargs,
         },
-        undersample_kwargs=undersample_kwargs,
         valid_fold_num=valid_fold_num,
         batch_size=batch_size,
+        **pipeline_kwargs,
     )
     
     if pipeline_before_train_fn:
@@ -248,39 +319,56 @@ def single_run(
             print('Using previous result')
             pipeline_before_train_fn(pipeline, prev_result, negative_use_ratio)
     
-    train_record, state_dict = pipeline.train_until_fit(patience=patience, return_state_dict=True)
+    train_record, state_dict = pipeline.train_until_fit(
+        patience=patience,
+        max_epoch=max_epoch,
+        return_state_dict=True
+    )
     
     pipeline.task.load_state_dict(state_dict)
     
-    df_train = create_single_pred_dataframe(pipeline, pipeline.train_set)
-    df_valid = create_single_pred_dataframe(pipeline, pipeline.valid_set)
-    df_test = create_single_pred_dataframe(pipeline, pipeline.test_set)
+    df_train = create_single_pred_dataframe(pipeline, pipeline.train_set, gpu=gpu)
+    df_valid = create_single_pred_dataframe(pipeline, pipeline.valid_set, gpu=gpu)
+    df_test = create_single_pred_dataframe(pipeline, pipeline.test_set, gpu=gpu)
+    
+    best_record_index = np.argmax([record['valid_mcc'] for record in train_record])
+    best_record = train_record[best_record_index]
     
     return {
         'df_train': df_train,
         'df_valid': df_valid,
         'df_test': df_test,
-        'record': train_record[-1 - patience],
+        'record': best_record,
+        'full_record': train_record,
     }
 
-def write_result(model_key, valid_fold, result):
+def write_result(model_key, 
+                 valid_fold, 
+                 result,
+                 write_inference=True,
+                 result_file='result_cv/result_cv.csv',
+                 additional_record={},
+                 ):
     # write dataframes to result_cv/{model_key}/fold_{valid_fold}/{train | valid | test}.csv
     # aggregate record to result_cv/result_cv.csv
-    folder = f'result_cv/{model_key}/fold_{valid_fold}'
-    os.makedirs(folder, exist_ok=True)
-    result['df_train'].to_csv(f'{folder}/train.csv', index=False)
-    result['df_valid'].to_csv(f'{folder}/valid.csv', index=False)
-    result['df_test'].to_csv(f'{folder}/test.csv', index=False)
-    record_df = read_initial_csv('result_cv/result_cv.csv')
+    if write_inference:
+        folder = f'result_cv/{model_key}/fold_{valid_fold}'
+        os.makedirs(folder, exist_ok=True)
+        result['df_train'].to_csv(f'{folder}/train.csv', index=False)
+        result['df_valid'].to_csv(f'{folder}/valid.csv', index=False)
+        result['df_test'].to_csv(f'{folder}/test.csv', index=False)
+    
+    record_df = read_initial_csv(result_file)
     record_df = pd.concat([record_df, pd.DataFrame([
         {
             'model_key': model_key,
             'valid_fold': valid_fold,
             **result['record'],
+            **additional_record,
             'finished_at': pd.Timestamp.now().strftime('%Y-%m-%d %X'),
         }
     ])])
-    record_df.to_csv('result_cv/result_cv.csv', index=False)
+    record_df.to_csv(result_file, index=False)
 
 def write_result_intermediate(model_key, valid_fold, result, iter):
     folder = f'result_cv/{model_key}/fold_{valid_fold}/intermediate'
@@ -367,7 +455,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     GPU = args.gpu
-    print(f'Using GPU {GPU}')
+    print(f'Using default GPU {GPU}')
     print(f'Running model keys {args.model_keys}')
     print(f'Running valid folds {args.valid_folds}')
     for model_key in args.model_keys:
