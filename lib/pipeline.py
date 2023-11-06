@@ -275,7 +275,7 @@ class Pipeline:
 
                 # record
                 if use_dynamic_threshold:
-                    results = self.valid_dataset_stats(threshold_set='valid')
+                    results = self.valid_dataset_stats()
                     valid_mcc = results['best_mcc']
                     threshold = results['best_threshold']
                     valid_bce = results['loss']

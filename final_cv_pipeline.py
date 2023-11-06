@@ -75,6 +75,21 @@ def esm_33_gearnet_pretrained_pipeline_fn(layer_count=30):
         )
     return fn
 
+CYCLE_SIZE = 10
+CYCLIC_SCHEDULER_KWARGS = {
+    'pipeline_kwargs': {
+        'scheduler': 'cyclic',
+        'scheduler_kwargs': {
+            'base_lr': 3e-4,
+            'max_lr': 3e-3,
+            'step_size_up': CYCLE_SIZE / 2,
+            'step_size_down': CYCLE_SIZE / 2,
+            'cycle_momentum': False
+        }
+    },
+    'patience': CYCLE_SIZE,
+    'max_epoch': CYCLE_SIZE,
+}
 
 ALL_PARAMS = {
     'esm-t33': {
@@ -82,34 +97,6 @@ ALL_PARAMS = {
         'model_kwargs': {
             'freeze_esm': False,
             'freeze_layer_count': 30,  
-        },
-    },
-    'esm-t33-29': {
-        'model': 'esm-t33',
-        'model_kwargs': {
-            'freeze_esm': False,
-            'freeze_layer_count': 29,  
-        },
-    },
-    'esm-t33-30': {
-        'model': 'esm-t33',
-        'model_kwargs': {
-            'freeze_esm': False,
-            'freeze_layer_count': 30,  
-        },
-    },
-    'esm-t33-31': {
-        'model': 'esm-t33',
-        'model_kwargs': {
-            'freeze_esm': False,
-            'freeze_layer_count': 31,  
-        },
-    },
-    'esm-t33-32': {
-        'model': 'esm-t33',
-        'model_kwargs': {
-            'freeze_esm': False,
-            'freeze_layer_count': 32,  
         },
     },
     'bert': {
@@ -143,54 +130,7 @@ ALL_PARAMS = {
             'gearnet_hidden_dim_count': 4,
             'lm_freeze_layer_count': 30,
         },
-    },
-    'esm-33-gearnet-discr': {
-        'model': 'lm-gearnet',
-        'model_kwargs': {
-            'lm_type': 'esm-t33',
-            'gearnet_hidden_dim_size': 512,
-            'gearnet_hidden_dim_count': 4,
-            'lm_freeze_layer_count': 30,
-        },
-        'pipeline_kwargs': {
-            'discriminative_decay_factor': 2,
-        },
-    },
-    'esm-33-gearnet-31': {
-        'model': 'lm-gearnet',
-        'model_kwargs': {
-            'lm_type': 'esm-t33',
-            'gearnet_hidden_dim_size': 512,
-            'gearnet_hidden_dim_count': 4,
-            'lm_freeze_layer_count': 31,
-        },
-    },
-    'esm-33-gearnet-30': {
-        'model': 'lm-gearnet',
-        'model_kwargs': {
-            'lm_type': 'esm-t33',
-            'gearnet_hidden_dim_size': 512,
-            'gearnet_hidden_dim_count': 4,
-            'lm_freeze_layer_count': 30,
-        },
-    },
-    'esm-33-gearnet-29': {
-        'model': 'lm-gearnet',
-        'model_kwargs': {
-            'lm_type': 'esm-t33',
-            'gearnet_hidden_dim_size': 512,
-            'gearnet_hidden_dim_count': 4,
-            'lm_freeze_layer_count': 29,
-        },
-    },
-    'esm-33-gearnet-28': {
-        'model': 'lm-gearnet',
-        'model_kwargs': {
-            'lm_type': 'esm-t33',
-            'gearnet_hidden_dim_size': 512,
-            'gearnet_hidden_dim_count': 4,
-            'lm_freeze_layer_count': 28,
-        },
+        **CYCLIC_SCHEDULER_KWARGS,
     },
     'esm-t33-ensemble': {
         'ensemble_count': 10,
