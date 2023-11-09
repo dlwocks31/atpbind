@@ -231,6 +231,7 @@ class Pipeline:
                                       self.valid_set,
                                       self.test_set,
                                       self.optimizer,
+                                      scheduler=self.scheduler,
                                       batch_size=self.batch_size,
                                       log_interval=1000000000,
                                       gpus=self.gpus,

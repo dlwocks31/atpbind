@@ -89,6 +89,23 @@ CYCLIC_SCHEDULER_KWARGS = {
     },
     'patience': CYCLE_SIZE,
     'max_epoch': CYCLE_SIZE,
+    'use_finished_state': True,
+}
+
+CYCLIC_SCHEDULER_KWARGS_BASE_1E3 ={
+    'pipeline_kwargs': {
+        'scheduler': 'cyclic',
+        'scheduler_kwargs': {
+            'base_lr': 1e-3,
+            'max_lr': 3e-3,
+            'step_size_up': CYCLE_SIZE / 2,
+            'step_size_down': CYCLE_SIZE / 2,
+            'cycle_momentum': False
+        }
+    },
+    'patience': CYCLE_SIZE,
+    'max_epoch': CYCLE_SIZE,
+    'use_finished_state': True,
 }
 
 ALL_PARAMS = {
@@ -98,6 +115,7 @@ ALL_PARAMS = {
             'freeze_esm': False,
             'freeze_layer_count': 30,  
         },
+        **CYCLIC_SCHEDULER_KWARGS,
     },
     'bert': {
         'model': 'bert',
@@ -159,6 +177,7 @@ ALL_PARAMS = {
             'gearnet_hidden_dim_count': 4,
             'lm_freeze_layer_count': 30,
         },
+        **CYCLIC_SCHEDULER_KWARGS,
     },
     'esm-33-gearnet-ensemble-rus': {
         'ensemble_count': 10,
@@ -181,9 +200,25 @@ ALL_PARAMS = {
             'gearnet_hidden_dim_count': 4,
             'lm_freeze_layer_count': 30,
         },
-        'batch_size': 6,
+        'batch_size': 8,
         'negative_use_ratio': 0.5,
         'pipeline_before_train_fn': resiboost_preprocess,
+        **CYCLIC_SCHEDULER_KWARGS,
+    },
+    'esm-33-gearnet-resiboost-v2': {
+        'ensemble_count': 30,
+        'model': 'lm-gearnet',
+        'model_kwargs': {
+            'lm_type': 'esm-t33',
+            'gearnet_hidden_dim_size': 512,
+            'gearnet_hidden_dim_count': 4,
+            'lm_freeze_layer_count': 30,
+        },
+        'batch_size': 8,
+        'negative_use_ratio': 0.5,
+        'pipeline_before_train_fn': resiboost_preprocess,
+        **CYCLIC_SCHEDULER_KWARGS_BASE_1E3,
+        
     },
     'esm-33-gearnet-resiboost-n25': {
         'ensemble_count': 50,
@@ -234,6 +269,7 @@ def single_run(
     negative_use_ratio=None,
     pipeline_kwargs={},
     gpu=None,
+    use_finished_state=False,
 ):
     print(f'batch_size: {batch_size}')
     gpu = gpu or GPU
@@ -265,15 +301,23 @@ def single_run(
         return_state_dict=True
     )
     
-    pipeline.task.load_state_dict(state_dict)
+    if use_finished_state:
+        print('Computing dataframe: Using finished state..')
+    else:
+        print('Computing dataframe: Using best state..')
+        pipeline.task.load_state_dict(state_dict)
     
     df_train = create_single_pred_dataframe(pipeline, pipeline.train_set, gpu=gpu)
     df_valid = create_single_pred_dataframe(pipeline, pipeline.valid_set, gpu=gpu)
     df_test = create_single_pred_dataframe(pipeline, pipeline.test_set, gpu=gpu)
     
-    best_record_index = np.argmax([record['valid_mcc'] for record in train_record])
-    best_record = train_record[best_record_index]
+    if use_finished_state:
+        best_record_index = -1
+    else:
+        best_record_index = np.argmax([record['valid_mcc'] for record in train_record])
     
+    best_record = train_record[best_record_index]
+    print(f'single_run done. Best MCC: {best_record["mcc"]}')
     return {
         'df_train': df_train,
         'df_valid': df_valid,
