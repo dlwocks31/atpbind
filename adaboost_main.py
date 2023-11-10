@@ -1,4 +1,4 @@
-from lib.pipeline import Pipeline
+from lib.pipeline import Pipeline, create_single_pred_dataframe
 from torchdrug import utils, data
 import pandas as pd
 import os
@@ -37,27 +37,6 @@ def create_mean_ensemble_pred_dataframe(files):
     return df
 
 
-def create_single_pred_dataframe(pipeline, dataset):
-    df = pd.DataFrame()
-    pipeline.task.eval()
-    for protein_index, batch in enumerate(data.DataLoader(dataset, batch_size=1, shuffle=False)):
-        batch = utils.cuda(batch, device=f'cuda:{GPU}')
-        label = pipeline.task.target(batch)['label'].flatten()
-
-        new_data = {
-            'protein_index': protein_index,
-            'residue_index': list(range(len(label))),
-            'target': label.tolist(),
-        }
-        pred = pipeline.task.predict(batch).flatten()
-        assert (len(label) == len(pred))
-        new_data[f'pred'] = [round(t, 5) for t in pred.tolist()]
-        new_data = pd.DataFrame(new_data)
-        df = pd.concat([df, new_data])
-
-    return df
-
-
 def build_mask_from_prefix_me(masks, prefix, mask_negative_ratio, valid_fold):
     # fill all the masks with True
     for i in range(len(masks)):
@@ -83,6 +62,18 @@ def build_mask_from_prefix_me(masks, prefix, mask_negative_ratio, valid_fold):
 
     return masks
 
+CYCLE_SIZE = 10
+CYCLIC_SCHEDULER_KWARGS = {
+    'scheduler': 'cyclic',
+    'scheduler_kwargs': {
+        'base_lr': 3e-4,
+        'max_lr': 3e-3,
+        'step_size_up': CYCLE_SIZE / 2,
+        'step_size_down': CYCLE_SIZE / 2,
+        'cycle_momentum': False
+    }
+}
+
 
 def adaboost_iter(iter_num, masks=None, prefix='adaboost', mask_negative_ratio=0.5):
     # initialize new pipeline
@@ -92,18 +83,16 @@ def adaboost_iter(iter_num, masks=None, prefix='adaboost', mask_negative_ratio=0
         'lm_type': 'esm-t33',
         'gearnet_hidden_dim_size': 512,
         'gearnet_hidden_dim_count': 4,
+        'lm_freeze_layer_count': 30,
     }
     pipeline = Pipeline(
         model='lm-gearnet',
         dataset='atpbind3d',  # TODO
         gpus=[GPU],
         model_kwargs=model_kwargs,
-        optimizer_kwargs={
-            'lr': 1e-3,
-        },
         batch_size=6,  # TODO 6
+        **CYCLIC_SCHEDULER_KWARGS,
     )
-    pipeline.model.freeze_lm(freeze_all=False, freeze_layer_count=30)
 
     print('Apply undersample')
     masks = build_mask_from_prefix_me(
@@ -115,13 +104,11 @@ def adaboost_iter(iter_num, masks=None, prefix='adaboost', mask_negative_ratio=0
     pipeline.apply_undersample(masks=masks)
 
     print('Training..')
-    train_record, train_preds, valid_preds, test_preds = pipeline.train_until_fit(
-        patience=5,  # TODO 5
-        return_preds=True,
-        use_dynamic_threshold=False
-    )
+    pipeline.train_until_fit(patience=CYCLE_SIZE, max_epoch=CYCLE_SIZE)
     print('Train Done')
-
+    train_preds = create_single_pred_dataframe(pipeline=pipeline, dataset=pipeline.train_set)
+    valid_preds = create_single_pred_dataframe(pipeline=pipeline, dataset=pipeline.valid_set)
+    test_preds = create_single_pred_dataframe(pipeline=pipeline, dataset=pipeline.test_set)
     # save prediction of current round
     print('Saving prediction')
     train_preds.to_csv(f'preds/{prefix}_{iter_num:02d}_train.csv', index=False)
