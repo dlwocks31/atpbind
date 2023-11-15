@@ -101,7 +101,7 @@ def adaboost_iter(iter_num, masks=None, prefix='adaboost', mask_negative_ratio=0
         mask_negative_ratio=mask_negative_ratio,
         valid_fold=pipeline.dataset.valid_fold()
     )
-    pipeline.apply_undersample(masks=masks)
+    pipeline.apply_mask_and_weights(masks=masks)
 
     print('Training..')
     pipeline.train_until_fit(patience=CYCLE_SIZE, max_epoch=CYCLE_SIZE)

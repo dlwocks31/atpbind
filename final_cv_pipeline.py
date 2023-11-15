@@ -10,7 +10,7 @@ from lib.utils import generate_mean_ensemble_metrics_auto, read_initial_csv, agg
 GPU = 0
 
 
-def rus_preprocess(pipeline, prev_results, negative_use_ratio):
+def rus_preprocess(pipeline, prev_results, negative_use_ratio, _):
     # build random mask
     masks = pipeline.dataset.masks
     for i in range(len(masks)):
@@ -19,12 +19,12 @@ def rus_preprocess(pipeline, prev_results, negative_use_ratio):
         assert(len(positive_mask) == len(negative_mask))
         mask = positive_mask | negative_mask
         masks[i] = mask
-    pipeline.apply_undersample(masks=masks)
+    pipeline.apply_mask_and_weights(masks=masks)
     
 def sigmoid(x):
     return 1 / (1 + np.exp(-x))
 
-def resiboost_preprocess(pipeline, prev_results, negative_use_ratio):
+def resiboost_preprocess(pipeline, prev_results, negative_use_ratio, _):
     if not negative_use_ratio:
         raise ValueError('negative_use_ratio must be specified for resiboost_preprocess')
     # build mask
@@ -62,8 +62,85 @@ def resiboost_preprocess(pipeline, prev_results, negative_use_ratio):
             protein_index_in_dataset += len(pipeline.dataset.valid_fold())
         masks[protein_index_in_dataset][int(row['residue_index'])] = False
     
-    pipeline.apply_undersample(masks=masks)
+    pipeline.apply_mask_and_weights(masks=masks)
     
+    
+
+def resiboost_v2_preprocess(pipeline, prev_results, _, prev_weights):
+    if not prev_results:
+        return
+
+    weights = prev_weights
+    THRESHOLD = -1.3863 # This is sigmoid^{-1}(0.2)
+    df_train = prev_results[-1]['df_train']
+    def from_row(row):
+        pred_binary = row['pred'] > THRESHOLD
+        is_correct = bool(row['target']) == pred_binary
+        protein_index_in_dataset = int(row['protein_index'])
+        # assume valid fold is consecutive: so that if protein index is larger than first protein index in valid fold, 
+        # we need to add the length of valid fold as an offset
+        if row['protein_index'] >= pipeline.dataset.valid_fold()[0]:
+            protein_index_in_dataset += len(pipeline.dataset.valid_fold())
+        residue_index = int(row['residue_index'])
+        return (is_correct, protein_index_in_dataset, residue_index)
+    
+    # 1. Compute Error of Learner
+    print('resiboost_v2_preprocess: Computing error of learner..')
+    error_ls = []
+    err = 0
+    weight_sum = 0
+    size = len(df_train)
+    for _, row in df_train.iterrows():
+        is_correct, protein_index_in_dataset, residue_index = from_row(row)
+        
+        if not is_correct:
+            err += 1
+            error_ls.append((protein_index_in_dataset, residue_index, weights[protein_index_in_dataset][residue_index].item(), row['pred']))
+        weight_sum += 1
+        
+    err_ratio = err / weight_sum
+    
+    
+    a = 0.5 * np.log((1 - err_ratio) / err_ratio)
+    prev_results[-1] = {**prev_results[-1], 'alpha': a}
+    error_ls.sort(key=lambda x: -x[3])
+    print(f'resiboost_v2_preprocess: Error: {err}, weighted sum: {weight_sum}. size: {size}. Error ratio: {err_ratio}, alpha: {a}')
+    print(f'Error list: {error_ls[:10]}...')
+    
+    # 2. Update Weights
+    print('resiboost_v2_preprocess: Updating weights..')
+    for _, row in df_train.iterrows():
+        is_correct, protein_index_in_dataset, residue_index = from_row(row)
+        if protein_index_in_dataset == 0 and residue_index <= 5:
+            print(f'resiboost_v2_preprocess: residue_index = {residue_index}, is_correct = {is_correct}, pred = {row["pred"]}')
+        if bool(row['target']) == False and row['pred'] < -4:
+            weights[protein_index_in_dataset][residue_index] /= np.log2(-row['pred']-2)
+        elif bool(row['target']) == False and row['pred'] > 0:
+             weights[protein_index_in_dataset][residue_index] *= np.log2(4+row['pred'])
+    
+    # 3. Normalize Weights
+    print('resiboost_v2_preprocess: Normalizing weights..')
+    neg_weight_sum = 0
+    neg_weight_cnt = 0
+    
+    for _, row in df_train.iterrows():
+        _, protein_index_in_dataset, residue_index = from_row(row)
+        if bool(row['target']) == False:
+            neg_weight_sum += weights[protein_index_in_dataset][residue_index].item()
+            neg_weight_cnt += 1
+
+    for _, row in df_train.iterrows():
+        _, protein_index_in_dataset, residue_index = from_row(row)
+        if bool(row['target']) == False:
+            weights[protein_index_in_dataset][residue_index] *= neg_weight_cnt / neg_weight_sum
+        
+    print(f'resiboost_v2_preprocess: Before normalize, weight sum was: {round(neg_weight_sum, 1)}, Now Weights: {str(weights[0])[:100]}...')
+    
+    # 4. Apply Weights and Alpha
+    print('resiboost_v2_preprocess: Applying weights and alpha..')
+    pipeline.apply_mask_and_weights(masks=None, weights=weights)
+    
+
 def esm_33_gearnet_pretrained_pipeline_fn(layer_count=30):
     def fn(pipeline):
         weight_file = f'esm_pretrained_fold_{pipeline.valid_fold_num}.pt'
@@ -74,6 +151,8 @@ def esm_33_gearnet_pretrained_pipeline_fn(layer_count=30):
             freeze_layer_count=32,
         )
     return fn
+
+DEBUG = False
 
 CYCLE_SIZE = 10
 CYCLIC_SCHEDULER_KWARGS = {
@@ -215,9 +294,8 @@ ALL_PARAMS = {
             'lm_freeze_layer_count': 30,
         },
         'batch_size': 8,
-        'negative_use_ratio': 0.5,
-        'pipeline_before_train_fn': resiboost_preprocess,
-        **CYCLIC_SCHEDULER_KWARGS_BASE_1E3,
+        'pipeline_before_train_fn': resiboost_v2_preprocess,
+        **CYCLIC_SCHEDULER_KWARGS,
         
     },
     'esm-33-gearnet-resiboost-n25': {
@@ -256,7 +334,6 @@ def create_single_pred_dataframe(pipeline, dataset, gpu=None):
 
     return df
 
-DEBUG = False
 def single_run(
     valid_fold_num,
     model,
@@ -270,6 +347,7 @@ def single_run(
     pipeline_kwargs={},
     gpu=None,
     use_finished_state=False,
+    prev_weights=None,
 ):
     print(f'batch_size: {batch_size}')
     gpu = gpu or GPU
@@ -293,7 +371,7 @@ def single_run(
             pipeline_before_train_fn(pipeline)
         else: # used by resiboost, which need previous state
             print('Using previous result')
-            pipeline_before_train_fn(pipeline, prev_result, negative_use_ratio)
+            pipeline_before_train_fn(pipeline, prev_result, negative_use_ratio, prev_weights)
     
     train_record, state_dict = pipeline.train_until_fit(
         patience=patience,
@@ -322,6 +400,7 @@ def single_run(
         'df_train': df_train,
         'df_valid': df_valid,
         'df_test': df_test,
+        'weights': pipeline.dataset.weights,
         'record': best_record,
         'full_record': train_record,
     }
@@ -397,6 +476,7 @@ def main(model_key, valid_fold):
                      result=result)
     else:
         results = []
+        weights = None
         ensemble_count = model.pop('ensemble_count')
         
         for iter in range(ensemble_count):
@@ -404,6 +484,7 @@ def main(model_key, valid_fold):
                 valid_fold_num=valid_fold,
                 **model,
                 prev_result=results,
+                prev_weights=weights,
             )
             results.append(result)
             write_result_intermediate(
@@ -412,6 +493,7 @@ def main(model_key, valid_fold):
                 result=result,
                 iter=iter,
             )
+            weights = result['weights']
         # do mean ensemble
         print('Doing mean ensemble')
         df_valid = aggregate_pred_dataframe(dfs=[r['df_valid'] for r in results], apply_sig=True)
@@ -442,7 +524,11 @@ if __name__ == '__main__':
     print(f'Using default GPU {GPU}')
     print(f'Running model keys {args.model_keys}')
     print(f'Running valid folds {args.valid_folds}')
-    for model_key in args.model_keys:
-        for valid_fold in args.valid_folds:
-            print(f'Running {model_key} fold {valid_fold}')
-            main(model_key=model_key, valid_fold=valid_fold)
+    try:
+        for model_key in args.model_keys:
+            for valid_fold in args.valid_folds:
+                print(f'Running {model_key} fold {valid_fold}')
+                main(model_key=model_key, valid_fold=valid_fold)
+    except KeyboardInterrupt:
+        print('Received KeyboardInterrupt. Exit.')
+        exit(0)

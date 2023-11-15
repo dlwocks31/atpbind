@@ -99,6 +99,7 @@ class NodePropertyPrediction(tasks.Task, core.Configurable):
         return {
             "label": batch["graph"].target,
             "mask": batch["graph"].mask,
+            "weight": batch["graph"].weight,
             "size": size
         }
 
@@ -115,14 +116,14 @@ class NodePropertyPrediction(tasks.Task, core.Configurable):
         
         # print(f'in forward: mask: {target["mask"].sum()} / {len(target["mask"])}')
 
-        for criterion, weight in self.criterion.items():
+        for criterion, criterion_weight in self.criterion.items():
             if criterion == "mse":
                 if self.normalization:
                     loss = F.mse_loss((pred - self.mean) / self.std, (target - self.mean) / self.std, reduction="none")
                 else:
                     loss = F.mse_loss(pred, target, reduction="none")
             elif criterion == "bce":
-                loss = F.binary_cross_entropy_with_logits(pred, target["label"].float(), reduction="none", pos_weight=self.bce_weight)
+                loss = F.binary_cross_entropy_with_logits(pred, target["label"].float(), weight=target["weight"], reduction="none", pos_weight=self.bce_weight)
             elif criterion == "ce":
                 loss = F.cross_entropy(pred, target["label"], reduction="none")
             else:
@@ -131,7 +132,7 @@ class NodePropertyPrediction(tasks.Task, core.Configurable):
 
             name = tasks._get_criterion_name(criterion)
             metric[name] = loss
-            all_loss += loss * weight
+            all_loss += loss * criterion_weight
 
         all_loss += loss
 

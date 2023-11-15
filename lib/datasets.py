@@ -139,7 +139,7 @@ class ATPBind3D(data.ProteinDataset):
 
         
 
-    def initialize_undersampling(self, masks=None):
+    def initialize_mask_and_weights(self, masks=None, weights=None):
         if masks is not None:
             print('Initialize Undersampling: fixed mask')
             self.masks = masks
@@ -149,8 +149,17 @@ class ATPBind3D(data.ProteinDataset):
                 torch.ones(len(target)).bool()
                 for target in self.targets["binding"]
             ]
-        return self
         
+        if weights is not None:
+            print('Initialize Weighting: fixed weight')
+            self.weights = weights
+        else:
+            print('Initialize Weighting: all ones')
+            self.weights = [
+                torch.ones(len(target)).float()
+                for target in self.targets["binding"]
+            ]
+        return self
 
     def get_seq_target(self, path, limit):
         sequences, targets, pdb_ids = [], [], []
@@ -184,11 +193,17 @@ class ATPBind3D(data.ProteinDataset):
     def _is_train_set(self, index):
         return (index < self.train_sample_count) and (index not in self.fold_ranges[self.valid_fold_num])
 
-    def _generate_mask(self, index):
+    def _get_mask(self, index):
         if not self._is_train_set(index) or self.masks is None:
             # if not train set, do not mask!
             return torch.ones(len(self.targets["binding"][index])).bool()
         return self.masks[index]
+
+    def _get_weight(self, index):
+        if not self._is_train_set(index) or self.weights is None:
+            # if not train set, do not weight!
+            return torch.ones(len(self.targets["binding"][index])).float()
+        return self.weights[index]
     
     def valid_fold(self):
         return self.fold_ranges[self.valid_fold_num]
@@ -203,7 +218,8 @@ class ATPBind3D(data.ProteinDataset):
             target = torch.as_tensor(
                 self.targets["binding"][index], dtype=torch.long).view(-1, 1)
             graph.target = target
-            graph.mask = self._generate_mask(index).view(-1, 1)
+            graph.mask = self._get_mask(index).view(-1, 1)
+            graph.weight = self._get_weight(index).view(-1, 1)
         graph.view = 'residue'
         item = {"graph": graph}
         if self.transform:

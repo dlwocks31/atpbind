@@ -1,15 +1,18 @@
 from final_cv_pipeline import single_run, write_result
 import numpy as np
 
-def lr_range_test(tenfold_iter=10, valid_fold_num=0):
+def lr_range_test(tenfold_iter=10, valid_fold_num=0, gn_dim_count=4):
     start_lr = 1e-8
     gamma = 10**(1/tenfold_iter)
+    model = 'lm-gearnet'
     result = single_run(
         valid_fold_num=valid_fold_num,
-        model='esm-t33',
+        model=model,
         model_kwargs={
-            'freeze_esm': False,
-            'freeze_layer_count': 30,
+            'lm_type': 'esm-t33',
+            'gearnet_hidden_dim_size': 512,
+            'gearnet_hidden_dim_count': gn_dim_count,
+            'lm_freeze_layer_count': 30,
         },
         pipeline_kwargs={
             'optimizer_kwargs': {
@@ -28,7 +31,7 @@ def lr_range_test(tenfold_iter=10, valid_fold_num=0):
     for record in result['full_record']:
         result['record'] = record
         write_result(
-            model_key=f'esm-t33-lrrange',
+            model_key=f'{model}-{gn_dim_count}-lrrange',
             valid_fold=valid_fold_num,
             result=result,
             write_inference=False,
@@ -81,7 +84,8 @@ def scheduler_test(base_lr, max_lr, step_size_up, step_size_down, fold=0, gpu=1)
 if __name__ == '__main__':
     # lr_range_test(tenfold_iter=5, valid_fold_num=0)
     # lr_range_test(tenfold_iter=10, valid_fold_num=1)
-    lr_range_test(tenfold_iter=20, valid_fold_num=2)
+    lr_range_test(tenfold_iter=20, valid_fold_num=0, gn_dim_count=4)
+    lr_range_test(tenfold_iter=20, valid_fold_num=0, gn_dim_count=2)
     # import argparse
     # parser = argparse.ArgumentParser()
     # parser.add_argument('--base_lrs', type=float, nargs='+', default=[1e-3])

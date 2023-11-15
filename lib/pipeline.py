@@ -119,7 +119,7 @@ class Pipeline:
 
         self.dataset = get_dataset(dataset, max_length=max_length)
         self.valid_fold_num = valid_fold_num
-        self.train_set, self.valid_set, self.test_set = self.dataset.initialize_undersampling(
+        self.train_set, self.valid_set, self.test_set = self.dataset.initialize_mask_and_weights(
             **undersample_kwargs).split(valid_fold_num=valid_fold_num)
         print("train samples: %d, valid samples: %d, test samples: %d" %
               (len(self.train_set), len(self.valid_set), len(self.test_set)))
@@ -208,23 +208,17 @@ class Pipeline:
 
         self.verbose = verbose
         self.batch_size = batch_size
-        with DisableLogger():
-            self.solver = core.Engine(self.task,
-                                      self.train_set,
-                                      self.valid_set,
-                                      self.test_set,
-                                      self.optimizer,
-                                      scheduler=self.scheduler,
-                                      batch_size=self.batch_size,
-                                      log_interval=1000000000,
-                                      gpus=self.gpus,
-                                      )
+        self._init_solver()
 
-    def apply_undersample(self, masks):
-        self.train_set, self.valid_set, self.test_set = self.dataset.initialize_undersampling(
-            masks=masks).split(valid_fold_num=self.valid_fold_num)
+    def apply_mask_and_weights(self, masks, weights=None):
+        self.train_set, self.valid_set, self.test_set = self.dataset.initialize_mask_and_weights(
+            masks=masks, weights=weights).split(valid_fold_num=self.valid_fold_num)
+        
         print("train samples: %d, valid samples: %d, test samples: %d" %
               (len(self.train_set), len(self.valid_set), len(self.test_set)))
+        self._init_solver()
+            
+    def _init_solver(self):
         with DisableLogger():
             self.solver = core.Engine(self.task,
                                       self.train_set,

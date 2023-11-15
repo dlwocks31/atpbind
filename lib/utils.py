@@ -82,12 +82,16 @@ def generate_mean_ensemble_metrics_auto(df_valid, df_test, start, end, step):
     best_threshold = thresholds[best_threshold_arg]
     
     best_test_metric = generate_mean_ensemble_metrics(df_test, threshold=best_threshold)
-    return best_test_metric
+    return {**best_test_metric, 'valid_mcc': valid_mccs[best_threshold_arg], 'best_threshold': best_threshold}
     
 def sigmoid(x):
     return 1 / (1 + np.exp(-x))
 
-def aggregate_pred_dataframe(files=None, dfs=None, apply_sig=False):
+
+def aggregate_pred_dataframe(files=None, dfs=None, alpha=None, apply_sig=False):
+    '''
+    alpha: "Amount of say" for each models. If None, equal weight is used. 
+    '''
     if dfs is None:
         dfs = [pd.read_csv(f) for f in files]
     final_df = dfs[0].rename(columns={'pred': 'pred_0'})
