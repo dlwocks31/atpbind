@@ -64,6 +64,37 @@ def resiboost_preprocess(pipeline, prev_results, negative_use_ratio, _):
     
     pipeline.apply_mask_and_weights(masks=masks)
     
+
+def resiboost_v1n_preprocess(pipeline, prev_results, negative_use_ratio, prev_weights):
+    # build mask
+    if not prev_results:
+        print('No previous result, mask nothing')
+        return
+    df_trains = [r['df_train'] for r in prev_results]
+    final_df = df_trains[0].rename(columns={'pred': 'pred_0'})
+    for i in range(1, len(df_trains)):
+        final_df[f'pred_{i}'] = df_trains[i]['pred']
+    
+    # # apply sigmoid
+    # for i in range(len(df_trains)):
+    #     col_name = f'pred_{i}'
+    #     final_df[col_name] = final_df[col_name].apply(sigmoid)
+    
+    final_df['pred'] = final_df[[f'pred_{i}' for i in range(len(df_trains))]].mean(axis=1)
+    final_df.reset_index(inplace=True)
+    negative_df = (final_df[final_df['target'] == 0]).sort_values(by=['pred']).reset_index()
+    
+    print(negative_df.head(10))
+    for idx, row in negative_df.iterrows():
+        protein_index_in_dataset = int(row['protein_index'])
+        # assume valid fold is consecutive: so that if protein index is larger than first protein index in valid fold, 
+        # we need to add the length of valid fold as an offset
+        if row['protein_index'] >= pipeline.dataset.valid_fold()[0]:
+            protein_index_in_dataset += len(pipeline.dataset.valid_fold())
+        ratio = idx / len(negative_df)
+        prev_weights[protein_index_in_dataset][int(row['residue_index'])] = ratio
+    
+    pipeline.apply_mask_and_weights(masks=None, weights=prev_weights)
     
 
 def resiboost_v2_preprocess(pipeline, prev_results, _, prev_weights):
@@ -283,6 +314,20 @@ ALL_PARAMS = {
         'negative_use_ratio': 0.5,
         'pipeline_before_train_fn': resiboost_preprocess,
         **CYCLIC_SCHEDULER_KWARGS,
+    },
+    'esm-33-gearnet-resiboost-v1n': {
+        'ensemble_count': 30,
+        'model': 'lm-gearnet',
+        'model_kwargs': {
+            'lm_type': 'esm-t33',
+            'gearnet_hidden_dim_size': 512,
+            'gearnet_hidden_dim_count': 4,
+            'lm_freeze_layer_count': 30,
+        },
+        'batch_size': 8,
+        'pipeline_before_train_fn': resiboost_v1n_preprocess,
+        **CYCLIC_SCHEDULER_KWARGS,
+        
     },
     'esm-33-gearnet-resiboost-v2': {
         'ensemble_count': 30,
