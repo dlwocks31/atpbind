@@ -84,6 +84,12 @@ class ATPBind(data.ProteinDataset):
 def read_file(path):
     '''
     Read from ATPBind dataset.
+    
+    return:
+        num_samples: number of samples in the file
+        sequences: list of sequences
+        targets: list of targets
+        pdb_ids: list of pdb_ids
     '''
     sequences, targets, pdb_ids = [], [], []
     with open(path) as f:
@@ -243,3 +249,101 @@ class ATPBind3D(data.ProteinDataset):
 
 def to_int_list(np_arr):
     return [int(i) for i in np_arr]
+
+
+class ImatinibBind(data.ProteinDataset):
+    splits = ['train', 'valid', 'test']
+    fold_count = 5
+    
+    def __init__(self, data_path=None, **kwargs):
+        # if data_path is none, set to ../data/imatinib
+        if data_path is None:
+            joined_path = os.path.join(os.path.dirname(__file__), '../data/imatinib')
+            data_path = os.path.normpath(joined_path)
+            print(f'ImatinibBind: data_path is None, set to {data_path}')
+        
+        _, targets, pdb_ids = self._get_seq_target(data_path)
+        pdb_files = [os.path.join(data_path, '%s.pdb' % pdb_id)
+                     for pdb_id in pdb_ids]
+        
+        self.load_pdbs(pdb_files, **kwargs)
+        self.targets = defaultdict(list)
+        self.targets["binding"] = targets["binding"]
+        
+        self.fold_ranges = np.array_split(np.arange(self.train_sample_count), self.fold_count)
+        
+
+    def _get_seq_target(self, path):
+        sequences, targets, pdb_ids = [], [], []
+        num_samples, sequences, targets, pdb_ids = read_file(os.path.join(path, 'imatinib_binding.txt'))
+        self.train_sample_count = int(num_samples * 0.8)
+        self.test_sample_count = num_samples - self.train_sample_count
+        
+        return sequences, {"binding": targets}, pdb_ids
+    
+    def get_item(self, index):
+        graph = self.data[index]
+        with graph.residue():
+            graph.target = torch.as_tensor(
+                self.targets["binding"][index], dtype=torch.long).view(-1, 1)
+            graph.mask = self._get_mask(index).view(-1, 1)
+            graph.weight = self._get_weight(index).view(-1, 1)
+        graph.view = 'residue'
+        item = {"graph": graph}
+        if self.transform:
+            item = self.transform(item)
+        return item
+    
+    def split(self, valid_fold_num=0):
+        assert(valid_fold_num < self.fold_count and valid_fold_num >= 0)
+        self.valid_fold_num = valid_fold_num
+
+        # Create train split excluding the validation fold
+        train_indices = [i for fold in (self.fold_ranges[:valid_fold_num] + self.fold_ranges[valid_fold_num + 1:]) for i in to_int_list(fold)]
+        train_split = torch_data.Subset(self, train_indices)
+
+        # Create validation split using the validation fold
+        validation_split = torch_data.Subset(self, to_int_list(self.fold_ranges[valid_fold_num]))
+
+        # Create test split based on the predefined range
+        test_split = torch_data.Subset(self, list(range(self.train_sample_count, self.train_sample_count + self.test_sample_count)))
+        return [train_split, validation_split, test_split]
+
+
+    def _is_train_set(self, index):
+        return (index < self.train_sample_count) and (index not in self.fold_ranges[self.valid_fold_num])
+
+    def _get_mask(self, index):
+        if not self._is_train_set(index) or self.masks is None:
+            # if not train set, do not mask!
+            return torch.ones(len(self.targets["binding"][index])).bool()
+        return self.masks[index]
+
+    def _get_weight(self, index):
+        if not self._is_train_set(index) or self.weights is None:
+            # if not train set, do not weight!
+            return torch.ones(len(self.targets["binding"][index])).float()
+        return self.weights[index]
+    
+    def initialize_mask_and_weights(self, masks=None, weights=None):
+        if masks is not None:
+            print('Initialize Undersampling: fixed mask')
+            self.masks = masks
+        else:
+            print('Initialize Undersampling: all ones')
+            self.masks = [
+                torch.ones(len(target)).bool()
+                for target in self.targets["binding"]
+            ]
+        
+        if weights is not None:
+            print('Initialize Weighting: fixed weight')
+            self.weights = weights
+        else:
+            print('Initialize Weighting: all ones')
+            self.weights = [
+                torch.ones(len(target)).float()
+                for target in self.targets["binding"]
+            ]
+        return self
+            

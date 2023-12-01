@@ -24,6 +24,15 @@ def rus_preprocess(pipeline, prev_results, negative_use_ratio, _):
 def sigmoid(x):
     return 1 / (1 + np.exp(-x))
 
+
+
+def resiboost_preprocess_random_init(pipeline, prev_results, negative_use_ratio, _):
+    if prev_results:
+        resiboost_preprocess(pipeline, prev_results, negative_use_ratio, _)
+    else:
+        rus_preprocess(pipeline, _, negative_use_ratio, _)
+
+
 def resiboost_preprocess(pipeline, prev_results, negative_use_ratio, _):
     if not negative_use_ratio:
         raise ValueError('negative_use_ratio must be specified for resiboost_preprocess')
@@ -355,6 +364,20 @@ ALL_PARAMS = {
         'batch_size': 6,
         'negative_use_ratio': 0.25,
         'pipeline_before_train_fn': resiboost_preprocess,
+    },
+    'esm-33-gearnet-resiboost-ri': {
+        'ensemble_count': 30,
+        'model': 'lm-gearnet',
+        'model_kwargs': {
+            'lm_type': 'esm-t33',
+            'gearnet_hidden_dim_size': 512,
+            'gearnet_hidden_dim_count': 4,
+            'lm_freeze_layer_count': 30,
+        },
+        'batch_size': 8,
+        'negative_use_ratio': 0.5,
+        'pipeline_before_train_fn': resiboost_preprocess_random_init,
+        **CYCLIC_SCHEDULER_KWARGS,
     },
 }
 

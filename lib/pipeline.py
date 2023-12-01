@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 from statistics import mean
 
 from .tasks import NodePropertyPrediction, MeanEnsembleNodePropertyPrediction
-from .datasets import ATPBind, ATPBind3D
+from .datasets import ATPBind3D, ImatinibBind
 from .bert import BertWrapModel, EsmWrapModel
 from .custom_models import GearNetWrapModel, LMGearNetModel
 from .utils import dict_tensor_to_num, round_dict
@@ -49,6 +49,14 @@ def get_dataset(dataset, max_length=350):
 
         limit = -1 if dataset == 'atpbind3d' else 5
         return ATPBind3D(transform=transform, limit=limit)
+    elif dataset == 'imatinib':
+        truncuate_transform = transforms.TruncateProtein(
+            max_length=max_length, random=False)
+        protein_view_transform = transforms.ProteinView(view='residue')
+        transform = transforms.Compose(
+            [truncuate_transform, protein_view_transform])
+
+        return ImatinibBind(transform=transform)
     elif dataset == 'atpbind':
         raise NotImplementedError('atpbind dataset dropped')
 
@@ -82,7 +90,7 @@ METRICS_USING = ("sensitivity", "specificity", "accuracy",
 class Pipeline:
     possible_models = ['bert', 'gearnet', 'lm-gearnet',
                        'cnn', 'esm-t6', 'esm-t12', 'esm-t30', 'esm-t33', 'esm-t36', 'esm-t48']
-    possible_datasets = ['atpbind', 'atpbind3d', 'atpbind3d-minimal']
+    possible_datasets = ['atpbind', 'atpbind3d', 'atpbind3d-minimal', 'imatinib']
     threshold = 0
 
     def __init__(self,
@@ -124,50 +132,40 @@ class Pipeline:
         print("train samples: %d, valid samples: %d, test samples: %d" %
               (len(self.train_set), len(self.valid_set), len(self.test_set)))
 
-        if dataset == 'atpbind':
+        edge_layers = [
+            geometry.SpatialEdge(radius=10.0, min_distance=5),
+            geometry.KNNEdge(k=10, min_distance=5),
+            geometry.SequentialEdge(max_distance=2),
+        ]
+
+        graph_construction_model = layers.GraphConstruction(
+            node_layers=[geometry.AlphaCarbonNode()],
+            edge_layers=edge_layers,
+            edge_feature="gearnet"
+        )
+        task_kwargs = {
+            'graph_construction_model': graph_construction_model,
+            'normalization': False,
+            'num_mlp_layer': num_mlp_layer,
+            'metric': METRICS_USING,
+            'bce_weight': torch.tensor([bce_weight], device=torch.device(f'cuda:{self.gpus[0]}')),
+            **task_kwargs,
+        }
+
+        if task == 'npp':
             self.task = NodePropertyPrediction(
                 self.model,
-                normalization=False,
-                num_mlp_layer=num_mlp_layer,
-                metric=METRICS_USING,
-                bce_weight=torch.tensor(
-                    [bce_weight], device=torch.device(f'cuda:{self.gpus[0]}')),
                 **task_kwargs,
             )
-        elif dataset == 'atpbind3d' or dataset == 'atpbind3d-minimal':
-            edge_layers = [
-                geometry.SpatialEdge(radius=10.0, min_distance=5),
-                geometry.KNNEdge(k=10, min_distance=5),
-                geometry.SequentialEdge(max_distance=2),
-            ]
-
-            graph_construction_model = layers.GraphConstruction(
-                node_layers=[geometry.AlphaCarbonNode()],
-                edge_layers=edge_layers,
-                edge_feature="gearnet"
-            )
-            task_kwargs = {
-                'graph_construction_model': graph_construction_model,
-                'normalization': False,
-                'num_mlp_layer': num_mlp_layer,
-                'metric': METRICS_USING,
-                'bce_weight': torch.tensor([bce_weight], device=torch.device(f'cuda:{self.gpus[0]}')),
+        elif task == 'mean-ensemble':
+            self.task = MeanEnsembleNodePropertyPrediction(
+                self.model,
                 **task_kwargs,
-            }
-
-            if task == 'npp':
-                self.task = NodePropertyPrediction(
-                    self.model,
-                    **task_kwargs,
-                )
-            elif task == 'mean-ensemble':
-                self.task = MeanEnsembleNodePropertyPrediction(
-                    self.model,
-                    **task_kwargs,
-                )
-            else:
-                raise ValueError(
-                    'Task must be one of {}'.format(['npp', 'me_npp']))
+            )
+        else:
+            raise ValueError(
+                'Task must be one of {}'.format(['npp', 'me_npp']))
+            
 
         if not optimizer in ['adam', 'adamw']:
             raise ValueError(
