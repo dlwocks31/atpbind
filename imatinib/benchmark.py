@@ -16,6 +16,35 @@ from lib.pipeline import create_single_pred_dataframe
 from lib.utils import aggregate_pred_dataframe, generate_mean_ensemble_metrics_auto
 
 
+def make_resiboost_preprocess_fn(negative_use_ratio):
+    def resiboost_preprocess(pipeline, df_trains):
+        # build mask
+        if not df_trains:
+            print('No previous result, mask nothing')
+            return
+        masks = pipeline.dataset.masks
+        
+        final_df = aggregate_pred_dataframe(dfs=df_trains, apply_sig=True)
+        
+        negative_df = final_df[final_df['target'] == 0]
+        
+        # larger negative_use_ratio means more negative samples are used in training
+        confident_negative_df = negative_df.sort_values(
+            by=['pred'])[:int(len(negative_df) * (1-negative_use_ratio))]
+        
+        print(f'Masking out {len(confident_negative_df)} negative samples out of {len(negative_df)}. Most confident negative samples:')
+        print(confident_negative_df.head(10))
+        for _, row in confident_negative_df.iterrows():
+            protein_index_in_dataset = int(row['protein_index'])
+            # assume valid fold is consecutive: so that if protein index is larger than first protein index in valid fold, 
+            # we need to add the length of valid fold as an offset
+            if row['protein_index'] >= pipeline.dataset.valid_fold()[0]:
+                protein_index_in_dataset += len(pipeline.dataset.valid_fold())
+            masks[protein_index_in_dataset][int(row['residue_index'])] = False
+        
+        pipeline.apply_mask_and_weights(masks=masks)
+    return resiboost_preprocess
+    
 ALL_PARAMS = {
     'esm-t33': {
         'model': 'esm-t33',
@@ -86,14 +115,35 @@ ALL_PARAMS = {
         'ensemble_count': 10,
         'model_ref': 'esm-33-gearnet',
     },
+    'esm-33-gearnet-resiboost': {
+        'ensemble_count': 10,
+        'model_ref': 'esm-33-gearnet',
+        'before_train_lambda_ensemble': make_resiboost_preprocess_fn(negative_use_ratio=0.5),
+    },
     'esm-33-gearnet-pretrained-ensemble': {
         'ensemble_count': 10,
         'model_ref': 'esm-33-gearnet-pretrained',
+    },
+    'esm-33-gearnet-pretrained-resiboost': {
+        'ensemble_count': 10,
+        'model_ref': 'esm-33-gearnet-pretrained',
+        'before_train_lambda_ensemble': make_resiboost_preprocess_fn(negative_use_ratio=0.5),
     },
     'esm-33-gearnet-pretrained-freezelm-ensemble': {
         'ensemble_count': 10,
         'model_ref': 'esm-33-gearnet-pretrained-freezelm',
     },
+    'esm-33-gearnet-pretrained-freezelm-resiboost': {
+        'ensemble_count': 10,
+        'model_ref': 'esm-33-gearnet-pretrained-freezelm',
+        'before_train_lambda_ensemble': make_resiboost_preprocess_fn(negative_use_ratio=0.5),
+    },
+    'esm-33-gearnet-pretrained-freezelm-test': {
+        'ensemble_count': 10,
+        'model_ref': 'esm-33-gearnet-pretrained-freezelm',
+        'before_train_lambda_ensemble': make_resiboost_preprocess_fn(negative_use_ratio=0.05),
+    },
+    
 }
 
 
@@ -104,7 +154,9 @@ def run_test(
     fold,
     gpu,
     before_train_lambda=None,
+    before_train_lambda_ensemble=None,
     get_inference_df=False,
+    df_trains=None,
 ):
     device = f"cuda:{gpu}"
     pipeline = Pipeline(
@@ -115,7 +167,7 @@ def run_test(
             'gpu': gpu,
             **model_kwargs,
         },
-        batch_size=4,
+        batch_size=1,
         scheduler='cyclic',
         scheduler_kwargs={
             'base_lr': 3e-4,
@@ -132,35 +184,42 @@ def run_test(
     
     if before_train_lambda is not None:
         before_train_lambda(pipeline)
+    elif before_train_lambda_ensemble is not None:
+        before_train_lambda_ensemble(pipeline, df_trains)
 
     res = pipeline.train_until_fit(max_epoch=10, patience=10)
     if get_inference_df:
+        df_train = create_single_pred_dataframe(pipeline=pipeline, dataset=pipeline.train_set)
         df_valid = create_single_pred_dataframe(pipeline=pipeline, dataset=pipeline.valid_set)
         df_test = create_single_pred_dataframe(pipeline=pipeline, dataset=pipeline.test_set)
-        return res[-1], df_valid, df_test
+        return res[-1], df_train, df_valid, df_test
     else:
         return res[-1]
 
-def run_ensemble_test(ensemble_count, model_ref, fold, gpu):
+def run_ensemble_test(ensemble_count, model_ref, fold, gpu, before_train_lambda_ensemble=None):
+    df_trains = []
     df_valids = []
     df_tests = []
     for i in range(ensemble_count):
         print(f'ensemble: {i}')
-        res, df_valid, df_test = run_test(
+        res, df_train, df_valid, df_test = run_test(
             gpu = gpu,
             fold = fold,
             **ALL_PARAMS[model_ref],
+            before_train_lambda_ensemble=before_train_lambda_ensemble,
             get_inference_df=True,
+            df_trains=df_trains,
         )
+        df_trains.append(df_train)
         df_valids.append(df_valid)
         df_tests.append(df_test)
     
-    df_valid = aggregate_pred_dataframe(dfs=df_valids, apply_sig=True)
-    df_test = aggregate_pred_dataframe(dfs=df_tests, apply_sig=True)
-    
-    me_metric = generate_mean_ensemble_metrics_auto(df_valid=df_valid, df_test=df_test, start=0.1, end=0.9, step=0.01)
-    del me_metric['best_threshold']
-    print(f'me_metric: {me_metric}')
+        df_valid = aggregate_pred_dataframe(dfs=df_valids, apply_sig=False)
+        df_test = aggregate_pred_dataframe(dfs=df_tests, apply_sig=False)
+        
+        me_metric = generate_mean_ensemble_metrics_auto(df_valid=df_valid, df_test=df_test, start=-3, end=1, step=0.1)
+        print(f'me_metric: {me_metric}')
+        del me_metric['best_threshold']
     return me_metric
 
     
@@ -172,6 +231,7 @@ def main(param_key, cnt, gpu):
                 res = run_ensemble_test(
                     ensemble_count = ALL_PARAMS[param_key]['ensemble_count'],
                     model_ref = ALL_PARAMS[param_key]['model_ref'],
+                    before_train_lambda_ensemble=ALL_PARAMS[param_key].get('before_train_lambda_ensemble', None),
                     fold = fold,
                     gpu = gpu,
                 )

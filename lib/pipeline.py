@@ -113,6 +113,7 @@ class Pipeline:
                  num_mlp_layer=2,
                  discriminative_decay_factor=None,
                  ):
+        print(f'init pipeline, model: {model}, dataset: {dataset}, gpus: {gpus}')
         self.gpus = gpus
 
         if model not in self.possible_models and not isinstance(model, torch.nn.Module):

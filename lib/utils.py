@@ -100,4 +100,5 @@ def aggregate_pred_dataframe(files=None, dfs=None, alpha=None, apply_sig=False):
     if apply_sig:
         for i in range(len(dfs)):
             final_df[f'pred_{i}'] = final_df[f'pred_{i}'].apply(sigmoid)
+    final_df['pred'] = final_df[list(filter(lambda a: a.startswith('pred_'), final_df.columns.tolist()))].mean(axis=1)
     return final_df.reset_index()

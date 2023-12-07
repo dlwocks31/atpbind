@@ -295,6 +295,7 @@ class ImatinibBind(data.ProteinDataset):
         return item
     
     def split(self, valid_fold_num=0):
+        print(f'ImatinibBind: split with valid_fold_num {valid_fold_num}')
         assert(valid_fold_num < self.fold_count and valid_fold_num >= 0)
         self.valid_fold_num = valid_fold_num
 
@@ -309,6 +310,8 @@ class ImatinibBind(data.ProteinDataset):
         test_split = torch_data.Subset(self, list(range(self.train_sample_count, self.train_sample_count + self.test_sample_count)))
         return [train_split, validation_split, test_split]
 
+    def valid_fold(self):
+        return self.fold_ranges[self.valid_fold_num]
 
     def _is_train_set(self, index):
         return (index < self.train_sample_count) and (index not in self.fold_ranges[self.valid_fold_num])
