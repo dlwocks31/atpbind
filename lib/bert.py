@@ -114,5 +114,4 @@ class EsmWrapModel(torch.nn.Module, core.Configurable):
             residue_feature.append(emb[1:1+input_len[i]])
         # print(f'esm residue_feature shape: {residue_feature[0].shape}, len: {len(residue_feature)}')
         x = torch.cat(residue_feature)
-        # print(f'esm x shape: {x.shape}')
         return {"residue_feature": x}

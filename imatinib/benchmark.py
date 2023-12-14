@@ -115,7 +115,7 @@ ALL_PARAMS = {
         'ensemble_count': 10,
         'model_ref': 'esm-33-gearnet',
     },
-    'esm-33-gearnet-resiboost': {
+    'esm-33-gearnet-rboost50': {
         'ensemble_count': 10,
         'model_ref': 'esm-33-gearnet',
         'before_train_lambda_ensemble': make_resiboost_preprocess_fn(negative_use_ratio=0.5),
@@ -124,30 +124,46 @@ ALL_PARAMS = {
         'ensemble_count': 10,
         'model_ref': 'esm-33-gearnet-pretrained',
     },
-    'esm-33-gearnet-pretrained-resiboost': {
+    'esm-33-gearnet-pretrained-rboost50': {
         'ensemble_count': 10,
         'model_ref': 'esm-33-gearnet-pretrained',
         'before_train_lambda_ensemble': make_resiboost_preprocess_fn(negative_use_ratio=0.5),
+    },
+    'esm-33-gearnet-pretrained-rboost10': {
+        'ensemble_count': 10,
+        'model_ref': 'esm-33-gearnet-pretrained',
+        'before_train_lambda_ensemble': make_resiboost_preprocess_fn(negative_use_ratio=0.1),
     },
     'esm-33-gearnet-pretrained-freezelm-ensemble': {
         'ensemble_count': 10,
         'model_ref': 'esm-33-gearnet-pretrained-freezelm',
     },
-    'esm-33-gearnet-pretrained-freezelm-resiboost': {
+    'esm-33-gearnet-pretrained-freezelm-rboost50': {
         'ensemble_count': 10,
         'model_ref': 'esm-33-gearnet-pretrained-freezelm',
         'before_train_lambda_ensemble': make_resiboost_preprocess_fn(negative_use_ratio=0.5),
     },
-    'esm-33-gearnet-pretrained-freezelm-test': {
+    'esm-33-gearnet-pretrained-freezelm-rboost25': {
+        'ensemble_count': 10,
+        'model_ref': 'esm-33-gearnet-pretrained-freezelm',
+        'before_train_lambda_ensemble': make_resiboost_preprocess_fn(negative_use_ratio=0.25),
+    },
+    'esm-33-gearnet-pretrained-freezelm-rboost10': {
+        'ensemble_count': 10,
+        'model_ref': 'esm-33-gearnet-pretrained-freezelm',
+        'before_train_lambda_ensemble': make_resiboost_preprocess_fn(negative_use_ratio=0.1),
+    },
+    'esm-33-gearnet-pretrained-freezelm-rboost05': {
         'ensemble_count': 10,
         'model_ref': 'esm-33-gearnet-pretrained-freezelm',
         'before_train_lambda_ensemble': make_resiboost_preprocess_fn(negative_use_ratio=0.05),
     },
-    
 }
 
+BATCH_SIZE = 1
 
 def run_test(
+    dataset_type,
     model,
     model_kwargs,
     load_path,
@@ -161,7 +177,7 @@ def run_test(
     device = f"cuda:{gpu}"
     pipeline = Pipeline(
         model=model,
-        dataset='imatinib',
+        dataset=dataset_type,
         gpus=[gpu],
         model_kwargs={
             'gpu': gpu,
@@ -196,13 +212,14 @@ def run_test(
     else:
         return res[-1]
 
-def run_ensemble_test(ensemble_count, model_ref, fold, gpu, before_train_lambda_ensemble=None):
+def run_ensemble_test(dataset_type, ensemble_count, model_ref, fold, gpu, before_train_lambda_ensemble=None):
     df_trains = []
     df_valids = []
     df_tests = []
     for i in range(ensemble_count):
         print(f'ensemble: {i}')
         res, df_train, df_valid, df_test = run_test(
+            dataset_type = dataset_type,
             gpu = gpu,
             fold = fold,
             **ALL_PARAMS[model_ref],
@@ -223,12 +240,13 @@ def run_ensemble_test(ensemble_count, model_ref, fold, gpu, before_train_lambda_
     return me_metric
 
     
-def main(param_key, cnt, gpu):
+def main(dataset_type, param_key, cnt, gpu):
     for i in range(cnt):
         for fold in range(5):
             print(f'param_key: {param_key}, cnt: {i}, fold: {fold}')
             if ALL_PARAMS[param_key].get('ensemble_count', None) is not None:
                 res = run_ensemble_test(
+                    dataset_type = dataset_type,
                     ensemble_count = ALL_PARAMS[param_key]['ensemble_count'],
                     model_ref = ALL_PARAMS[param_key]['model_ref'],
                     before_train_lambda_ensemble=ALL_PARAMS[param_key].get('before_train_lambda_ensemble', None),
@@ -237,12 +255,13 @@ def main(param_key, cnt, gpu):
                 )
             else:
                 res = run_test(
+                    dataset_type=dataset_type,
                     gpu = gpu,
                     fold = fold, 
                     **ALL_PARAMS[param_key],
                 )
                 
-            record_df = read_initial_csv('record.csv')
+            record_df = read_initial_csv(f'{dataset_type}.csv')
             record_df = pd.concat([record_df, pd.DataFrame([
                 {
                     'model_key': param_key,
@@ -252,19 +271,25 @@ def main(param_key, cnt, gpu):
                 }
             ])])
             
-            record_df.to_csv('record.csv', index=False)
+            record_df.to_csv(f'{dataset_type}.csv', index=False)
 
 
 if __name__ == '__main__':
     import argparse
+    import re
     parser = argparse.ArgumentParser()
+    parser.add_argument('--dataset_type', type=str, default='imatinib')
     parser.add_argument('--param_keys', type=str, nargs='+', default=list(ALL_PARAMS.keys()))
+    parser.add_argument('--param_key_regex', type=str, default=None)
     parser.add_argument('--cnt', type=int, default=1)
     parser.add_argument('--gpu', type=int, default=0)
     args = parser.parse_args()
     
+    
     for param_key in args.param_keys:
-        main(param_key, args.cnt, args.gpu)
+        if args.param_key_regex is not None and re.search(args.param_key_regex, param_key) is None:
+            continue
+        main(args.dataset_type, param_key, args.cnt, args.gpu)
     
     
     

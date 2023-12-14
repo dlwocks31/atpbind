@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 from statistics import mean
 
 from .tasks import NodePropertyPrediction, MeanEnsembleNodePropertyPrediction
-from .datasets import ATPBind3D, ImatinibBind
+from .datasets import CUSTOM_DATASET_TYPES, ATPBind3D, CustomBindDataset
 from .bert import BertWrapModel, EsmWrapModel
 from .custom_models import GearNetWrapModel, LMGearNetModel
 from .utils import dict_tensor_to_num, round_dict
@@ -49,16 +49,14 @@ def get_dataset(dataset, max_length=350):
 
         limit = -1 if dataset == 'atpbind3d' else 5
         return ATPBind3D(transform=transform, limit=limit)
-    elif dataset == 'imatinib':
+    elif dataset in CUSTOM_DATASET_TYPES:
         truncuate_transform = transforms.TruncateProtein(
             max_length=max_length, random=False)
         protein_view_transform = transforms.ProteinView(view='residue')
         transform = transforms.Compose(
             [truncuate_transform, protein_view_transform])
 
-        return ImatinibBind(transform=transform)
-    elif dataset == 'atpbind':
-        raise NotImplementedError('atpbind dataset dropped')
+        return CustomBindDataset(transform=transform, dataset_type=dataset)
 
 
 def create_single_pred_dataframe(pipeline, dataset):
@@ -90,7 +88,7 @@ METRICS_USING = ("sensitivity", "specificity", "accuracy",
 class Pipeline:
     possible_models = ['bert', 'gearnet', 'lm-gearnet',
                        'cnn', 'esm-t6', 'esm-t12', 'esm-t30', 'esm-t33', 'esm-t36', 'esm-t48']
-    possible_datasets = ['atpbind', 'atpbind3d', 'atpbind3d-minimal', 'imatinib']
+    possible_datasets = ['atpbind', 'atpbind3d', 'atpbind3d-minimal'] + CUSTOM_DATASET_TYPES
     threshold = 0
 
     def __init__(self,

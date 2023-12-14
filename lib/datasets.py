@@ -250,17 +250,18 @@ class ATPBind3D(data.ProteinDataset):
 def to_int_list(np_arr):
     return [int(i) for i in np_arr]
 
+CUSTOM_DATASET_TYPES = ['imatinib', 'dasatinib', 'bosutinib', 'methotrexate']
 
-class ImatinibBind(data.ProteinDataset):
+class CustomBindDataset(data.ProteinDataset):
     splits = ['train', 'valid', 'test']
     fold_count = 5
     
-    def __init__(self, data_path=None, **kwargs):
+    def __init__(self, dataset_type='imatinib', **kwargs):
         # if data_path is none, set to ../data/imatinib
-        if data_path is None:
-            joined_path = os.path.join(os.path.dirname(__file__), '../data/imatinib')
-            data_path = os.path.normpath(joined_path)
-            print(f'ImatinibBind: data_path is None, set to {data_path}')
+        self.dataset_type = dataset_type
+        joined_path = os.path.join(os.path.dirname(__file__), f'../data/{dataset_type}')
+        data_path = os.path.normpath(joined_path)
+        print(f'CustomBindDataset: data_path is set to {data_path}')
         
         _, targets, pdb_ids = self._get_seq_target(data_path)
         pdb_files = [os.path.join(data_path, '%s.pdb' % pdb_id)
@@ -270,12 +271,17 @@ class ImatinibBind(data.ProteinDataset):
         self.targets = defaultdict(list)
         self.targets["binding"] = targets["binding"]
         
+        assert(len(self.data) == len(self.targets["binding"]))
+        for protein, binding in zip(self.data, self.targets["binding"]):
+            if protein.num_residue != len(binding):
+                print(f'ERROR: protein: {protein.num_residue}, binding: {len(binding)}')
+        
         self.fold_ranges = np.array_split(np.arange(self.train_sample_count), self.fold_count)
         
 
     def _get_seq_target(self, path):
         sequences, targets, pdb_ids = [], [], []
-        num_samples, sequences, targets, pdb_ids = read_file(os.path.join(path, 'imatinib_binding.txt'))
+        num_samples, sequences, targets, pdb_ids = read_file(os.path.join(path, f'{self.dataset_type}_binding.txt'))
         self.train_sample_count = int(num_samples * 0.8)
         self.test_sample_count = num_samples - self.train_sample_count
         
@@ -295,7 +301,7 @@ class ImatinibBind(data.ProteinDataset):
         return item
     
     def split(self, valid_fold_num=0):
-        print(f'ImatinibBind: split with valid_fold_num {valid_fold_num}')
+        print(f'CustomBindDataset: split with valid_fold_num {valid_fold_num}')
         assert(valid_fold_num < self.fold_count and valid_fold_num >= 0)
         self.valid_fold_num = valid_fold_num
 

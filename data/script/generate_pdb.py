@@ -127,20 +127,23 @@ def try_loading_pdb(file_path):
         return None
 
 
-def validate(filename):
-    _, sequences, _, pdb_ids = read_file(filename)
+def validate(base_path, filename):
+    _, sequences, _, pdb_ids = read_file(os.path.join(base_path, filename))
     for sequence, pdb_id in zip(sequences, pdb_ids):
         # print('Validating %s..' % pdb_id)
-        file_path = '../pdb/%s.pdb' % pdb_id
+        file_path = os.path.join(base_path, '%s.pdb' % pdb_id)
         protein = try_loading_pdb(file_path)
         if not protein:
             continue
         protein_sequence = ''.join(
             i for i in protein.to_sequence() if i != '.')
         if protein_sequence != sequence:
-            print('validation failed for %s. len: %d %d' %
+            print('validation failed for %s: sequence unmatch. len: %d %d' %
                   (pdb_id, len(protein_sequence), len(sequence)))
             print(protein_sequence)
+        elif protein.num_residue != len(sequence):
+            print('validation failed for %s: length unmatch. len: %d %d' %
+                  (pdb_id, protein.num_residue, len(sequence)))
             continue
 
 
@@ -162,12 +165,12 @@ The affected PDB files are 5J1SB, 1MABB, 3LEVH, and 3BG5A.
 if __name__ == '__main__':
     warnings.filterwarnings("ignore", message=".*discontinuous at line.*")
     warnings.filterwarnings("ignore", message=".*Unknown.*")
-    print('Generate train set..')
-    generate_all_in_file('../../lib/train.txt')
-    print('Generate test set..')
-    generate_all_in_file('../../lib/test.txt')
+    # print('Generate train set..')
+    # generate_all_in_file('../../lib/train.txt')
+    # print('Generate test set..')
+    # generate_all_in_file('../../lib/test.txt')
 
-    print('Validating train set..')
-    validate('../../lib/train.txt')
-    print('Validating test set..')
-    validate('../../lib/test.txt')
+    print('Validating..')
+    dataset_type = 'bosutinib'
+    base_path = os.path.join(os.path.dirname(__file__), f'../../data/{dataset_type}')
+    validate(base_path, f'{dataset_type}_binding.txt')
