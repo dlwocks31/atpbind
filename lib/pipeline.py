@@ -204,6 +204,7 @@ class Pipeline:
             self.scheduler = None
 
         self.verbose = verbose
+        print(f'pipeline batch_size: {batch_size}')
         self.batch_size = batch_size
         self._init_solver()
 

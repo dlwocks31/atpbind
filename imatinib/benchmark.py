@@ -64,6 +64,17 @@ ALL_PARAMS = {
         },
         'load_path': None,
     },
+    'esm-33-gearnet-b8': {
+        'model': 'lm-gearnet',
+        'batch_size': 8,
+        'model_kwargs': {
+            'lm_type': 'esm-t33',
+            'gearnet_hidden_dim_size': 512,
+            'gearnet_hidden_dim_count': 4,
+            'lm_freeze_layer_count': 30,
+        },
+        'load_path': None,
+    },
     'esm-t33-pretrained': {
         'model': 'esm-t33',
         'model_kwargs': {
@@ -115,15 +126,33 @@ ALL_PARAMS = {
         'ensemble_count': 10,
         'model_ref': 'esm-33-gearnet',
     },
+    # ESM + GearNet + ResiBoost
     'esm-33-gearnet-rboost50': {
         'ensemble_count': 10,
         'model_ref': 'esm-33-gearnet',
         'before_train_lambda_ensemble': make_resiboost_preprocess_fn(negative_use_ratio=0.5),
     },
+    'esm-33-gearnet-rboost25': {
+        'ensemble_count': 10,
+        'model_ref': 'esm-33-gearnet',
+        'before_train_lambda_ensemble': make_resiboost_preprocess_fn(negative_use_ratio=0.25),
+    },
+    'esm-33-gearnet-rboost10': {
+        'ensemble_count': 10,
+        'model_ref': 'esm-33-gearnet',
+        'before_train_lambda_ensemble': make_resiboost_preprocess_fn(negative_use_ratio=0.1),
+    },
+    'esm-33-gearnet-rboost05': {
+        'ensemble_count': 10,
+        'model_ref': 'esm-33-gearnet',
+        'before_train_lambda_ensemble': make_resiboost_preprocess_fn(negative_use_ratio=0.05),
+    },
+    # ESM + GearNet + Pretrained + Ensemble
     'esm-33-gearnet-pretrained-ensemble': {
         'ensemble_count': 10,
         'model_ref': 'esm-33-gearnet-pretrained',
     },
+    # ESM + GearNet + Pretrained + ResiBoost
     'esm-33-gearnet-pretrained-rboost50': {
         'ensemble_count': 10,
         'model_ref': 'esm-33-gearnet-pretrained',
@@ -169,6 +198,7 @@ def run_test(
     load_path,
     fold,
     gpu,
+    batch_size=1,
     before_train_lambda=None,
     before_train_lambda_ensemble=None,
     get_inference_df=False,
@@ -183,7 +213,7 @@ def run_test(
             'gpu': gpu,
             **model_kwargs,
         },
-        batch_size=1,
+        batch_size=batch_size,
         scheduler='cyclic',
         scheduler_kwargs={
             'base_lr': 3e-4,
@@ -212,6 +242,8 @@ def run_test(
     else:
         return res[-1]
 
+WRITE_DF = False
+
 def run_ensemble_test(dataset_type, ensemble_count, model_ref, fold, gpu, before_train_lambda_ensemble=None):
     df_trains = []
     df_valids = []
@@ -234,9 +266,19 @@ def run_ensemble_test(dataset_type, ensemble_count, model_ref, fold, gpu, before
         df_valid = aggregate_pred_dataframe(dfs=df_valids, apply_sig=False)
         df_test = aggregate_pred_dataframe(dfs=df_tests, apply_sig=False)
         
-        me_metric = generate_mean_ensemble_metrics_auto(df_valid=df_valid, df_test=df_test, start=-3, end=1, step=0.1)
+        start, end, step = (0.1, 0.9, 0.01)
+
+        me_metric = generate_mean_ensemble_metrics_auto(df_valid=df_valid, df_test=df_test, start=start, end=end, step=step)
         print(f'me_metric: {me_metric}')
-        del me_metric['best_threshold']
+
+    
+    if WRITE_DF:
+        sum_preds = df_test[list(filter(lambda a: a.startswith('pred_'), df_test.columns.tolist()))].mean(axis=1)
+        final_prediction = (sum_preds > me_metric['best_threshold']).astype(int)
+        df_test['pred'] = final_prediction
+        df_test.to_csv(f'{dataset_type}_{model_ref}_{fold}.csv', index=False)
+            
+    del me_metric['best_threshold']
     return me_metric
 
     
@@ -283,8 +325,10 @@ if __name__ == '__main__':
     parser.add_argument('--param_key_regex', type=str, default=None)
     parser.add_argument('--cnt', type=int, default=1)
     parser.add_argument('--gpu', type=int, default=0)
+    parser.add_argument('--write_df', action='store_true')
     args = parser.parse_args()
     
+    WRITE_DF = args.write_df
     
     for param_key in args.param_keys:
         if args.param_key_regex is not None and re.search(args.param_key_regex, param_key) is None:

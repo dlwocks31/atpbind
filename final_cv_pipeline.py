@@ -277,6 +277,17 @@ ALL_PARAMS = {
             'freeze_layer_count': 30,  
         },
     },
+    'esm-t33-resiboost': {
+        'ensemble_count': 10,
+        'model': 'esm-t33',
+        'model_kwargs': {
+            'freeze_esm': False,
+            'freeze_layer_count': 30,  
+        },
+        'negative_use_ratio': 0.5,
+        'pipeline_before_train_fn': resiboost_preprocess,
+        **CYCLIC_SCHEDULER_KWARGS,
+    },
     'bert-gearnet-ensemble': {
         'ensemble_count': 10,
         'model': 'lm-gearnet',
