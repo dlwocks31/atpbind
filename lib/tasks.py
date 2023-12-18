@@ -63,6 +63,7 @@ class NodePropertyPrediction(tasks.Task, core.Configurable):
         graph = batch["graph"]
         if self.graph_construction_model:
             graph = self.graph_construction_model(graph)
+        
         node_feature = graph.node_feature.float()
         # if node_feature is of type `torch.sparse.FloatTensor`
         # Error like "Could not run 'aten::view' with arguments from the 'SparseCPU' backend" occurs. Thus do this conversion.

@@ -62,7 +62,6 @@ class LMGearNetModel(torch.nn.Module, core.Configurable):
             self.freeze_lm(freeze_layer_count=lm_freeze_layer_count)
 
     def forward(self, graph, _, all_loss=None, metric=None):
-        # print("sequence: ", graph.to_sequence())
         input = [separate_alphabets(seq) for seq in graph.to_sequence()]
         input_len = [len(seq.replace(' ', '')) for seq in input]
 

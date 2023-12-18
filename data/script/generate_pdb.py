@@ -1,6 +1,7 @@
 from Bio.PDB import Select, PDBIO
 from Bio.PDB.PDBParser import PDBParser
-from torchdrug import utils
+from torchdrug import utils, layers, data, utils
+from torchdrug.layers import geometry
 import os
 import pylcs
 from torchdrug import data
@@ -135,10 +136,26 @@ def validate(base_path, filename):
         protein = try_loading_pdb(file_path)
         if not protein:
             continue
+        
+        # Get sequence from protein after graph construction model leaving only alpha carbon nodes
+        graph_construction_model = layers.GraphConstruction(
+            node_layers=[geometry.AlphaCarbonNode()],
+            edge_layers = [
+                geometry.SpatialEdge(radius=10.0, min_distance=5),
+                geometry.KNNEdge(k=10, min_distance=5),
+                geometry.SequentialEdge(max_distance=2),
+            ],
+            edge_feature="gearnet",
+        )
+        dataloader = data.DataLoader([protein], batch_size=1)
+        batch = utils.cuda(next(iter(dataloader)))
+        batch = graph_construction_model(batch)
+        
         protein_sequence = ''.join(
-            i for i in protein.to_sequence() if i != '.')
+            i for i in batch.to_sequence()[0] if i != '.'
+        )
         if protein_sequence != sequence:
-            print('validation failed for %s: sequence unmatch. len: %d %d' %
+            print('validation failed for %s: sequence unmatch. length of alphacarbons: %d, length of given sequence: %d' %
                   (pdb_id, len(protein_sequence), len(sequence)))
             print(protein_sequence)
         elif protein.num_residue != len(sequence):
@@ -169,8 +186,9 @@ if __name__ == '__main__':
     # generate_all_in_file('../../lib/train.txt')
     # print('Generate test set..')
     # generate_all_in_file('../../lib/test.txt')
+    generate_all_in_file('../../lib/val.txt')
 
     print('Validating..')
-    dataset_type = 'bosutinib'
+    dataset_type = 'crizotinib'
     base_path = os.path.join(os.path.dirname(__file__), f'../../data/{dataset_type}')
     validate(base_path, f'{dataset_type}_binding.txt')

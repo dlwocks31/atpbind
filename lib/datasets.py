@@ -250,7 +250,7 @@ class ATPBind3D(data.ProteinDataset):
 def to_int_list(np_arr):
     return [int(i) for i in np_arr]
 
-CUSTOM_DATASET_TYPES = ['imatinib', 'dasatinib', 'bosutinib', 'methotrexate']
+CUSTOM_DATASET_TYPES = ['imatinib', 'dasatinib', 'bosutinib', 'methotrexate', 'crizotinib']
 
 class CustomBindDataset(data.ProteinDataset):
     splits = ['train', 'valid', 'test']

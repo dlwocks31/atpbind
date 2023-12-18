@@ -100,7 +100,7 @@ class EsmWrapModel(torch.nn.Module, core.Configurable):
         self.output_dim = self.esm_model.config.hidden_size
 
     def forward(self, graph, _, all_loss=None, metric=None):
-        input = [seq.replace('.', ' ') for seq in graph.to_sequence()]
+        input = [separate_alphabets(seq) for seq in graph.to_sequence()]
         input_len = [len(seq.replace(' ', '')) for seq in input]
         # print(f'esm graph: {graph}')
         # At large batch size, tokenization becomes the bottleneck
