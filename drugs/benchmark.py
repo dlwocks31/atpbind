@@ -46,6 +46,7 @@ def make_resiboost_preprocess_fn(negative_use_ratio):
     return resiboost_preprocess
     
 ALL_PARAMS = {
+    # ESM
     'esm-t33': {
         'model': 'esm-t33',
         'model_kwargs': {
@@ -54,6 +55,18 @@ ALL_PARAMS = {
         },
         'load_path': None,
     },
+    # ESM + Resiboost
+    'esm-t33-rboost50': {
+        'ensemble_count': 10,
+        'model_ref': 'esm-t33',
+        'before_train_lambda_ensemble': make_resiboost_preprocess_fn(negative_use_ratio=0.5),
+    },
+    'esm-t33-rboost10': {
+        'ensemble_count': 10,
+        'model_ref': 'esm-t33',
+        'before_train_lambda_ensemble': make_resiboost_preprocess_fn(negative_use_ratio=0.1),
+    },
+    # ESM + GearNet
     'esm-33-gearnet': {
         'model': 'lm-gearnet',
         'model_kwargs': {
@@ -75,6 +88,7 @@ ALL_PARAMS = {
         },
         'load_path': None,
     },
+    # ESM + Pretrained
     'esm-t33-pretrained': {
         'model': 'esm-t33',
         'model_kwargs': {
@@ -91,6 +105,19 @@ ALL_PARAMS = {
         },
         'load_path': 'esm-t33-pretrained.pth',
     },
+    # ESM + Pretrained + Resiboost
+    'esm-t33-pretrained-rboost50': {
+        'ensemble_count': 10,
+        'model_ref': 'esm-t33-pretrained',
+        'before_train_lambda_ensemble': make_resiboost_preprocess_fn(negative_use_ratio=0.5),
+    },
+    'esm-t33-pretrained-rboost10': {
+        'ensemble_count': 10,
+        'model_ref': 'esm-t33-pretrained',
+        'before_train_lambda_ensemble': make_resiboost_preprocess_fn(negative_use_ratio=0.1),
+    },
+    
+    # ESM + GearNet + Pretrained
     'esm-33-gearnet-pretrained': {
         'model': 'lm-gearnet',
         'model_kwargs': {
@@ -122,6 +149,7 @@ ALL_PARAMS = {
         'load_path': 'lm-gearnet-pretrained.pth',
         'before_train_lambda': lambda pipeline: pipeline.model.freeze_gearnet(freeze_all=True)
     },
+    # ESM + GearNet + Ensemble
     'esm-33-gearnet-ensemble': {
         'ensemble_count': 10,
         'model_ref': 'esm-33-gearnet',
@@ -132,19 +160,19 @@ ALL_PARAMS = {
         'model_ref': 'esm-33-gearnet',
         'before_train_lambda_ensemble': make_resiboost_preprocess_fn(negative_use_ratio=0.5),
     },
-    'esm-33-gearnet-rboost25': {
+    'esm-33-gearnet-rboost25-b8': {
         'ensemble_count': 10,
-        'model_ref': 'esm-33-gearnet',
+        'model_ref': 'esm-33-gearnet-b8',
         'before_train_lambda_ensemble': make_resiboost_preprocess_fn(negative_use_ratio=0.25),
     },
-    'esm-33-gearnet-rboost10': {
+    'esm-33-gearnet-rboost10-b8': {
         'ensemble_count': 10,
-        'model_ref': 'esm-33-gearnet',
+        'model_ref': 'esm-33-gearnet-b8',
         'before_train_lambda_ensemble': make_resiboost_preprocess_fn(negative_use_ratio=0.1),
     },
-    'esm-33-gearnet-rboost05': {
+    'esm-33-gearnet-rboost05-b8': {
         'ensemble_count': 10,
-        'model_ref': 'esm-33-gearnet',
+        'model_ref': 'esm-33-gearnet-b8',
         'before_train_lambda_ensemble': make_resiboost_preprocess_fn(negative_use_ratio=0.05),
     },
     # ESM + GearNet + Pretrained + Ensemble
@@ -205,6 +233,7 @@ def run_test(
     df_trains=None,
 ):
     device = f"cuda:{gpu}"
+    batch_size = 8 if dataset_type == 'atpbind3d' else 1
     pipeline = Pipeline(
         model=model,
         dataset=dataset_type,
@@ -320,7 +349,7 @@ if __name__ == '__main__':
     import argparse
     import re
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dataset_type', type=str, default='imatinib')
+    parser.add_argument('--dataset_type', type=str, nargs='+', default=['imatinib'])
     parser.add_argument('--param_keys', type=str, nargs='+', default=list(ALL_PARAMS.keys()))
     parser.add_argument('--param_key_regex', type=str, default=None)
     parser.add_argument('--cnt', type=int, default=1)
@@ -330,10 +359,11 @@ if __name__ == '__main__':
     
     WRITE_DF = args.write_df
     
-    for param_key in args.param_keys:
-        if args.param_key_regex is not None and re.search(args.param_key_regex, param_key) is None:
-            continue
-        main(args.dataset_type, param_key, args.cnt, args.gpu)
+    for dataset_type in args.dataset_type:
+        for param_key in args.param_keys:
+            if args.param_key_regex is not None and re.search(args.param_key_regex, param_key) is None:
+                continue
+            main(dataset_type, param_key, args.cnt, args.gpu)
     
     
     
