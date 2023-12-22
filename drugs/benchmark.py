@@ -55,6 +55,11 @@ ALL_PARAMS = {
         },
         'load_path': None,
     },
+    # ESM + Ensemble
+    'esm-t33-ensemble': {
+        'ensemble_count': 10,
+        'model_ref': 'esm-t33',
+    },
     # ESM + Resiboost
     'esm-t33-rboost50': {
         'ensemble_count': 10,
@@ -104,6 +109,11 @@ ALL_PARAMS = {
             'freeze_layer_count': 33,  
         },
         'load_path': 'esm-t33-pretrained.pth',
+    },
+    # ESM + Pretrained + Ensemble
+    'esm-t33-pretrained-ensemble': {
+        'ensemble_count': 10,
+        'model_ref': 'esm-t33-pretrained',
     },
     # ESM + Pretrained + Resiboost
     'esm-t33-pretrained-rboost50': {
