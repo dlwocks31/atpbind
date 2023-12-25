@@ -16,7 +16,7 @@ from lib.pipeline import create_single_pred_dataframe
 from lib.utils import aggregate_pred_dataframe, generate_mean_ensemble_metrics_auto
 
 
-def make_resiboost_preprocess_fn(negative_use_ratio):
+def make_resiboost_preprocess_fn(negative_use_ratio, mask_positive=False):
     def resiboost_preprocess(pipeline, df_trains):
         # build mask
         if not df_trains:
@@ -26,15 +26,22 @@ def make_resiboost_preprocess_fn(negative_use_ratio):
         
         final_df = aggregate_pred_dataframe(dfs=df_trains, apply_sig=True)
         
-        negative_df = final_df[final_df['target'] == 0]
+        mask_target_df = final_df if mask_positive else final_df[final_df['target'] == 0] 
         
         # larger negative_use_ratio means more negative samples are used in training
-        confident_negative_df = negative_df.sort_values(
-            by=['pred'])[:int(len(negative_df) * (1-negative_use_ratio))]
         
-        print(f'Masking out {len(confident_negative_df)} negative samples out of {len(negative_df)}. Most confident negative samples:')
-        print(confident_negative_df.head(10))
-        for _, row in confident_negative_df.iterrows():
+        # Create a new column for sorting
+        mask_target_df['sort_key'] = mask_target_df.apply(lambda row: 1-row['pred'] if row['target'] == 1 else row['pred'], axis=1)
+
+        # Sort the DataFrame using the new column
+        confident_target_df = mask_target_df.sort_values(by='sort_key')[:int(len(mask_target_df) * (1 - negative_use_ratio))]
+
+        # Drop the 'sort_key' column from the sorted DataFrame
+        confident_target_df = confident_target_df.drop(columns=['sort_key'])
+        
+        print(f'Masking out {len(confident_target_df)} samples out of {len(mask_target_df)}. (Originally {len(final_df)}) Most confident samples:')
+        print(confident_target_df.head(10))
+        for _, row in confident_target_df.iterrows():
             protein_index_in_dataset = int(row['protein_index'])
             # assume valid fold is consecutive: so that if protein index is larger than first protein index in valid fold, 
             # we need to add the length of valid fold as an offset
@@ -44,7 +51,7 @@ def make_resiboost_preprocess_fn(negative_use_ratio):
         
         pipeline.apply_mask_and_weights(masks=masks)
     return resiboost_preprocess
-    
+
 ALL_PARAMS = {
     # ESM
     'esm-t33': {
@@ -74,17 +81,6 @@ ALL_PARAMS = {
     # ESM + GearNet
     'esm-33-gearnet': {
         'model': 'lm-gearnet',
-        'model_kwargs': {
-            'lm_type': 'esm-t33',
-            'gearnet_hidden_dim_size': 512,
-            'gearnet_hidden_dim_count': 4,
-            'lm_freeze_layer_count': 30,
-        },
-        'load_path': None,
-    },
-    'esm-33-gearnet-b8': {
-        'model': 'lm-gearnet',
-        'batch_size': 8,
         'model_kwargs': {
             'lm_type': 'esm-t33',
             'gearnet_hidden_dim_size': 512,
@@ -170,19 +166,19 @@ ALL_PARAMS = {
         'model_ref': 'esm-33-gearnet',
         'before_train_lambda_ensemble': make_resiboost_preprocess_fn(negative_use_ratio=0.5),
     },
-    'esm-33-gearnet-rboost25-b8': {
+    'esm-33-gearnet-rboost25': {
         'ensemble_count': 10,
-        'model_ref': 'esm-33-gearnet-b8',
+        'model_ref': 'esm-33-gearnet',
         'before_train_lambda_ensemble': make_resiboost_preprocess_fn(negative_use_ratio=0.25),
     },
-    'esm-33-gearnet-rboost10-b8': {
+    'esm-33-gearnet-rboost10': {
         'ensemble_count': 10,
-        'model_ref': 'esm-33-gearnet-b8',
+        'model_ref': 'esm-33-gearnet',
         'before_train_lambda_ensemble': make_resiboost_preprocess_fn(negative_use_ratio=0.1),
     },
-    'esm-33-gearnet-rboost05-b8': {
+    'esm-33-gearnet-rboost05': {
         'ensemble_count': 10,
-        'model_ref': 'esm-33-gearnet-b8',
+        'model_ref': 'esm-33-gearnet',
         'before_train_lambda_ensemble': make_resiboost_preprocess_fn(negative_use_ratio=0.05),
     },
     # ESM + GearNet + Pretrained + Ensemble
@@ -224,6 +220,26 @@ ALL_PARAMS = {
         'ensemble_count': 10,
         'model_ref': 'esm-33-gearnet-pretrained-freezelm',
         'before_train_lambda_ensemble': make_resiboost_preprocess_fn(negative_use_ratio=0.05),
+    },
+    'esm-33-gearnet-pretrained-freezelm-aboost50': {
+        'ensemble_count': 10,
+        'model_ref': 'esm-33-gearnet-pretrained-freezelm',
+        'before_train_lambda_ensemble': make_resiboost_preprocess_fn(negative_use_ratio=0.5, mask_positive=True),
+    },
+    'esm-33-gearnet-pretrained-freezelm-aboost25': {
+        'ensemble_count': 10,
+        'model_ref': 'esm-33-gearnet-pretrained-freezelm',
+        'before_train_lambda_ensemble': make_resiboost_preprocess_fn(negative_use_ratio=0.25, mask_positive=True),
+    },
+    'esm-33-gearnet-pretrained-freezelm-aboost10': {
+        'ensemble_count': 10,
+        'model_ref': 'esm-33-gearnet-pretrained-freezelm',
+        'before_train_lambda_ensemble': make_resiboost_preprocess_fn(negative_use_ratio=0.1, mask_positive=True),
+    },
+    'esm-33-gearnet-pretrained-freezelm-aboost05': {
+        'ensemble_count': 10,
+        'model_ref': 'esm-33-gearnet-pretrained-freezelm',
+        'before_train_lambda_ensemble': make_resiboost_preprocess_fn(negative_use_ratio=0.05, mask_positive=True),
     },
 }
 
