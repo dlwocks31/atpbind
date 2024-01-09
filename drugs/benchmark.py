@@ -181,6 +181,27 @@ ALL_PARAMS = {
         'model_ref': 'esm-33-gearnet',
         'before_train_lambda_ensemble': make_resiboost_preprocess_fn(negative_use_ratio=0.05),
     },
+    # ESM + GearNet + All Boost
+    'esm-33-gearnet-aboost50': {
+        'ensemble_count': 10,
+        'model_ref': 'esm-33-gearnet',
+        'before_train_lambda_ensemble': make_resiboost_preprocess_fn(negative_use_ratio=0.5, mask_positive=True),
+    },
+    'esm-33-gearnet-aboost25': {
+        'ensemble_count': 10,
+        'model_ref': 'esm-33-gearnet',
+        'before_train_lambda_ensemble': make_resiboost_preprocess_fn(negative_use_ratio=0.25, mask_positive=True),
+    },
+    'esm-33-gearnet-aboost10': {
+        'ensemble_count': 10,
+        'model_ref': 'esm-33-gearnet',
+        'before_train_lambda_ensemble': make_resiboost_preprocess_fn(negative_use_ratio=0.1, mask_positive=True),
+    },
+    'esm-33-gearnet-aboost05': {
+        'ensemble_count': 10,
+        'model_ref': 'esm-33-gearnet',
+        'before_train_lambda_ensemble': make_resiboost_preprocess_fn(negative_use_ratio=0.05, mask_positive=True),
+    },
     # ESM + GearNet + Pretrained + Ensemble
     'esm-33-gearnet-pretrained-ensemble': {
         'ensemble_count': 10,
