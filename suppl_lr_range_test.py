@@ -1,4 +1,4 @@
-from final_cv_pipeline import single_run, write_result
+from atpbind_main import single_run, write_result
 import numpy as np
 
 def lr_range_test(tenfold_iter=10, valid_fold_num=0, gn_dim_count=4):
