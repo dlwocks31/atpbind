@@ -53,12 +53,29 @@ def make_resiboost_preprocess_fn(negative_use_ratio, mask_positive=False):
     return resiboost_preprocess
 
 ALL_PARAMS = {
+    # GearNet
+    'gearnet': {
+        'model': 'gearnet',
+        'model_kwargs': {
+            'input_dim': 21,
+            'hidden_dims': [512, 512, 512, 512],
+        },
+        'load_path': None,
+    },
     # ESM
     'esm-t33': {
         'model': 'esm-t33',
         'model_kwargs': {
             'freeze_esm': False,
             'freeze_layer_count': 30,  
+        },
+        'load_path': None,
+    },
+    'bert': {
+        'model': 'bert',
+        'model_kwargs': {
+            'freeze_bert': False,
+            'freeze_layer_count': 29,  
         },
         'load_path': None,
     },
@@ -73,10 +90,35 @@ ALL_PARAMS = {
         'model_ref': 'esm-t33',
         'before_train_lambda_ensemble': make_resiboost_preprocess_fn(negative_use_ratio=0.5),
     },
+    'esm-t33-rboost25': {
+        'ensemble_count': 10,
+        'model_ref': 'esm-t33',
+        'before_train_lambda_ensemble': make_resiboost_preprocess_fn(negative_use_ratio=0.25),
+    },
     'esm-t33-rboost10': {
         'ensemble_count': 10,
         'model_ref': 'esm-t33',
         'before_train_lambda_ensemble': make_resiboost_preprocess_fn(negative_use_ratio=0.1),
+    },
+    'esm-t33-aboost50': {
+        'ensemble_count': 10,
+        'model_ref': 'esm-t33',
+        'before_train_lambda_ensemble': make_resiboost_preprocess_fn(negative_use_ratio=0.5, mask_positive=True),
+    },
+    'esm-t33-aboost25': {
+        'ensemble_count': 10,
+        'model_ref': 'esm-t33',
+        'before_train_lambda_ensemble': make_resiboost_preprocess_fn(negative_use_ratio=0.25, mask_positive=True),
+    },
+    'esm-t33-aboost10': {
+        'ensemble_count': 10,
+        'model_ref': 'esm-t33',
+        'before_train_lambda_ensemble': make_resiboost_preprocess_fn(negative_use_ratio=0.1, mask_positive=True),
+    },
+    'esm-t33-aboost05': {
+        'ensemble_count': 10,
+        'model_ref': 'esm-t33',
+        'before_train_lambda_ensemble': make_resiboost_preprocess_fn(negative_use_ratio=0.1, mask_positive=True),
     },
     # ESM + GearNet
     'esm-33-gearnet': {
